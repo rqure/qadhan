@@ -115,12 +115,12 @@ func main() {
 					app.Logger().Advise(fmt.Sprintf("It is now time for: %s", next_prayer.Name))
 
 					audioFiles := []string{
-						"/app/audio/adhan/adhan-0.mp3",
-						"/app/audio/adhan/adhan-1.mp3",
-						"/app/audio/adhan/adhan-2.mp3",
-						"/app/audio/adhan/adhan-3.mp3",
-						"/app/audio/adhan/adhan-5.mp3",
-						"/app/audio/adhan/adhan-wahhab.mp3"}
+						"adhan-0.mp3",
+						"adhan-1.mp3",
+						"adhan-2.mp3",
+						"adhan-3.mp3",
+						"adhan-5.mp3",
+						"adhan-wahhab.mp3"}
 
 					if next_prayer.Name == "Fajr" {
 						audioFiles = []string{"/app/audio/adhan/fajr-1.mp3"}
