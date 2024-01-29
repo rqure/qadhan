@@ -63,7 +63,7 @@ func QueryPrayerTimesForThisMonth() ([]*qmq.QMQPrayer, error) {
 			"Maghrib": day.Timings.Maghrib,
 			"Isha":    day.Timings.Isha,
 		} {
-			timeParsed, err := time.Parse("02 Jan 2006 15:04 (MST)", fmt.Sprintf("%s %s", day.Date.Readable, timeStr))
+			timeParsed, err := time.ParseInLocation("02 Jan 2006 15:04 (MST)", fmt.Sprintf("%s %s", day.Date.Readable, timeStr), time.Local)
 			if err != nil {
 				continue
 			}
@@ -111,6 +111,7 @@ func main() {
 			next_prayer := &qmq.QMQPrayer{}
 			popped := app.Consumer("prayer:time:queue").Pop(next_prayer)
 			if popped != nil {
+				app.Logger().Debug(fmt.Sprintf("Next prayer: %s", next_prayer.String()))
 				if time.Now().After(next_prayer.Time.AsTime()) {
 					app.Logger().Advise(fmt.Sprintf("It is now time for: %s", next_prayer.Name))
 
