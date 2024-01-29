@@ -144,7 +144,7 @@ func main() {
 				} else {
 					for _, prayer := range prayers {
 						app.Logger().Debug(fmt.Sprintf("Found prayer '%s' starting at '%s'", prayer.Name, prayer.Time.AsTime().String()))
-						app.Producer("prayer:time:exchange").Push(prayer)
+						app.Producer("prayer:time:queue").Push(prayer)
 					}
 				}
 			}
