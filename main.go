@@ -63,7 +63,7 @@ func QueryPrayerTimesForThisMonth() ([]*qmq.QMQPrayer, error) {
 			"Maghrib": day.Timings.Maghrib,
 			"Isha":    day.Timings.Isha,
 		} {
-			timeParsed, err := time.Parse("02 Jan 2006 15:04 MST", fmt.Sprintf("%s %s +0000", day.Date.Readable, timeStr))
+			timeParsed, err := time.Parse("02 Jan 2006 15:04 (MST)", fmt.Sprintf("%s %s", day.Date.Readable, timeStr))
 			if err != nil {
 				continue
 			}
