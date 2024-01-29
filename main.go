@@ -30,26 +30,32 @@ func QueryPrayerTimesForThisMonth() ([]*qmq.QMQPrayer, error) {
 	}
 	defer resp.Body.Close()
 
-	var data struct {
-		Data []struct {
+	var response struct {
+		Code   int    `json:"code"`
+		Status string `json:"status"`
+		Data   []struct {
 			Timings struct {
 				Fajr    string `json:"Fajr"`
 				Dhuhr   string `json:"Dhuhr"`
 				Asr     string `json:"Asr"`
 				Maghrib string `json:"Maghrib"`
 				Isha    string `json:"Isha"`
+				// Add other prayer times as needed
 			} `json:"timings"`
 			Date struct {
-				Readable string `json:"readable"`
+				Readable  string `json:"readable"`
+				Timestamp string `json:"timestamp"`
+				// Extend this struct if you need more fields from the 'date' object
 			} `json:"date"`
+			// Add 'Meta' field here if needed
 		} `json:"data"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return nil, err
 	}
 
-	for _, day := range data.Data {
+	for _, day := range response.Data {
 		for prayer, timeStr := range map[string]string{
 			"Fajr":    day.Timings.Fajr,
 			"Dhuhr":   day.Timings.Dhuhr,
@@ -83,7 +89,7 @@ func main() {
 	app.Initialize()
 	defer app.Deinitialize()
 
-	app.AddProducer("prayer:time:exchange").Initialize(500)
+	app.AddProducer("prayer:time:queue").Initialize(500)
 	app.AddProducer("prayer:adhan:exchange").Initialize(1)
 	app.AddConsumer("prayer:time:queue").Initialize()
 
@@ -103,7 +109,7 @@ func main() {
 			return
 		case <-ticker.C:
 			next_prayer := &qmq.QMQPrayer{}
-			popped := app.Consumer("prayer:time-queue").Pop(next_prayer)
+			popped := app.Consumer("prayer:time:queue").Pop(next_prayer)
 			if popped != nil {
 				if time.Now().After(next_prayer.Time.AsTime()) {
 					app.Logger().Advise(fmt.Sprintf("It is now time for: %s", next_prayer.Name))
@@ -131,6 +137,7 @@ func main() {
 					popped.Dispose()
 				}
 			} else {
+				app.Logger().Advise("Querying prayer timees for this month")
 				prayers, err := QueryPrayerTimesForThisMonth()
 				if err != nil {
 					app.Logger().Error(fmt.Sprintf("Failed to query prayer times: %v", err))
