@@ -136,6 +136,7 @@ func main() {
 					app.Logger().Error(fmt.Sprintf("Failed to query prayer times: %v", err))
 				} else {
 					for _, prayer := range prayers {
+						app.Logger().Debug(fmt.Sprintf("Found prayer '%s' starting at '%s'", prayer.Name, prayer.Time.AsTime().String()))
 						app.Producer("prayer:time:exchange").Push(prayer)
 					}
 				}

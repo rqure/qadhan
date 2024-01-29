@@ -16,6 +16,9 @@ FROM gcr.io/distroless/base-debian11 AS build-release-stage
 
 WORKDIR /
 
+ENV CITY=EDMONTON
+ENV COUNTRY=CA
+
 COPY --from=build-stage /qapp /qapp
 
 USER nonroot:nonroot
