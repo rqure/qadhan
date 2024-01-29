@@ -47,7 +47,9 @@ func QueryPrayerTimesForThisMonth() ([]*qmq.QMQPrayer, error) {
 				Timestamp string `json:"timestamp"`
 				// Extend this struct if you need more fields from the 'date' object
 			} `json:"date"`
-			// Add 'Meta' field here if needed
+			Meta struct {
+				Timezone string `json:"timezone"`
+			} `json:"meta"`
 		} `json:"data"`
 	}
 
@@ -63,7 +65,12 @@ func QueryPrayerTimesForThisMonth() ([]*qmq.QMQPrayer, error) {
 			"Maghrib": day.Timings.Maghrib,
 			"Isha":    day.Timings.Isha,
 		} {
-			timeParsed, err := time.ParseInLocation("02 Jan 2006 15:04 (MST)", fmt.Sprintf("%s %s", day.Date.Readable, timeStr), time.Local)
+			loc, err := time.LoadLocation(day.Meta.Timezone)
+			if err != nil {
+				loc = time.Local
+			}
+
+			timeParsed, err := time.ParseInLocation("02 Jan 2006 15:04 (MST)", fmt.Sprintf("%s %s", day.Date.Readable, timeStr), loc)
 			if err != nil {
 				continue
 			}
