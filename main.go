@@ -118,7 +118,6 @@ func main() {
 			next_prayer := &qmq.QMQPrayer{}
 			popped := app.Consumer("prayer:time:queue").Pop(next_prayer)
 			if popped != nil {
-				app.Logger().Debug(fmt.Sprintf("Next prayer: %s", next_prayer.String()))
 				if time.Now().After(next_prayer.Time.AsTime()) {
 					app.Logger().Advise(fmt.Sprintf("It is now time for: %s", next_prayer.Name))
 
