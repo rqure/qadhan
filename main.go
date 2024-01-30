@@ -130,7 +130,7 @@ func main() {
 						"adhan-wahhab.mp3"}
 
 					if next_prayer.Name == "Fajr" {
-						audioFiles = []string{"/app/audio/adhan/fajr-1.mp3"}
+						audioFiles = []string{"fajr-1.mp3"}
 					}
 
 					randomIndex := rand.Intn(len(audioFiles))
