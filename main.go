@@ -97,8 +97,9 @@ func main() {
 	defer app.Deinitialize()
 
 	app.AddProducer("prayer:time:queue").Initialize(500)
-	app.AddProducer("prayer:adhan:exchange").Initialize(1)
 	app.AddConsumer("prayer:time:queue").Initialize()
+	
+	app.AddProducer("audio-player:file:exchange").Initialize(1)
 
 	tickRateMs, err := strconv.Atoi(os.Getenv("TICK_RATE_MS"))
 	if err != nil {
@@ -136,7 +137,7 @@ func main() {
 					randomIndex := rand.Intn(len(audioFiles))
 					audioFile := audioFiles[randomIndex]
 
-					app.Producer("prayer:adhan:exchange").Push(&qmq.QMQAudioRequest{
+					app.Producer("audio-player:file:exchange").Push(&qmq.QMQAudioRequest{
 						Filename: audioFile,
 					})
 					popped.Ack()
