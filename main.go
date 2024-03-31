@@ -99,7 +99,7 @@ func main() {
 	app.AddProducer("prayer:time:queue").Initialize(500)
 	app.AddConsumer("prayer:time:queue").Initialize()
 	
-	app.AddProducer("audio-player:file:exchange").Initialize(1)
+	app.AddProducer("audio-player:file:exchange").Initialize(10)
 
 	tickRateMs, err := strconv.Atoi(os.Getenv("TICK_RATE_MS"))
 	if err != nil {
