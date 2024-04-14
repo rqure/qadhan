@@ -31,7 +31,6 @@ func (e *EngineProcessor) Process(p qmq.EngineComponentProvider) {
 		case <-ticker.C:
 			select {
 			case consumable := <-p.WithConsumer("prayer:time:queue").Pop():
-				p.WithLogger().Trace("popped")
 				next_prayer := consumable.Data().(*qmq.Prayer)
 				if time.Now().After(next_prayer.Time.AsTime()) {
 					p.WithLogger().Advise(fmt.Sprintf("It is now time for: %s", next_prayer.Name))
