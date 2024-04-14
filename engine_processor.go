@@ -68,8 +68,6 @@ func (e *EngineProcessor) Process(p qmq.EngineComponentProvider) {
 								p.WithLogger().Advise(fmt.Sprintf("Scheduling %s reminder for: %s", prayerName, reminderTime.String()))
 								<-time.After(time.Until(reminderTime))
 
-								p.WithLogger().Advise(fmt.Sprintf("It is almost time for: %s", prayerName))
-
 								if reminderTimeMin == 60 {
 									p.WithProducer("audio-player:tts:exchange").Push(&qmq.TextToSpeechRequest{
 										Text: fmt.Sprintf("Reminder: %s starts in 1 hour", prayerName),
