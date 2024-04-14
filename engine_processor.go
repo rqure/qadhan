@@ -43,16 +43,16 @@ func (e *EngineProcessor) Process(p qmq.EngineComponentProvider) {
 		case <-ticker.C:
 			select {
 			case consumable := <-p.WithConsumer("prayer:time:queue").Pop():
-				next_prayer := consumable.Data().(*qmq.Prayer)
-				if time.Now().After(next_prayer.Time.AsTime()) {
-					p.WithLogger().Advise(fmt.Sprintf("It is now time for: %s", next_prayer.Name))
+				nextPrayer := consumable.Data().(*qmq.Prayer)
+				if time.Now().After(nextPrayer.Time.AsTime()) {
+					p.WithLogger().Advise(fmt.Sprintf("It is now time for: %s", nextPrayer.Name))
 
 					p.WithProducer("audio-player:tts:exchange").Push(&qmq.TextToSpeechRequest{
-						Text: fmt.Sprintf("It is now time for %s", next_prayer.Name),
+						Text: fmt.Sprintf("It is now time for %s", nextPrayer.Name),
 					})
 
 					p.WithProducer("audio-player:file:exchange").Push(&qmq.AudioRequest{
-						Filename: AdhanFileSelector.Select(next_prayer.Name),
+						Filename: AdhanFileSelector.Select(nextPrayer.Name),
 					})
 
 					e.reminderFlag.Store(false)
@@ -64,8 +64,8 @@ func (e *EngineProcessor) Process(p qmq.EngineComponentProvider) {
 					if e.reminderFlag.CompareAndSwap(false, true) {
 						for _, reminderTimeMin := range []int{10, 20, 30, 60} {
 							go func(reminderTimeMin int, prayerName string) {
-								reminderTime := next_prayer.Time.AsTime().Add(-time.Duration(reminderTimeMin) * time.Minute)
-								p.WithLogger().Advise(fmt.Sprintf("Scheduling reminder for: %s", reminderTime.String()))
+								reminderTime := nextPrayer.Time.AsTime().Add(-time.Duration(reminderTimeMin) * time.Minute)
+								p.WithLogger().Advise(fmt.Sprintf("Scheduling %s reminder for: %s", prayerName, reminderTime.String()))
 								<-time.After(time.Until(reminderTime))
 
 								p.WithLogger().Advise(fmt.Sprintf("It is almost time for: %s", prayerName))
@@ -79,7 +79,7 @@ func (e *EngineProcessor) Process(p qmq.EngineComponentProvider) {
 										Text: fmt.Sprintf("Reminder: %s starts in %d minutes", prayerName, reminderTimeMin),
 									})
 								}
-							}(reminderTimeMin, next_prayer.Name)
+							}(reminderTimeMin, nextPrayer.Name)
 						}
 					}
 				}
