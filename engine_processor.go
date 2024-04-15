@@ -30,6 +30,10 @@ func (e *EngineProcessor) Process(p qmq.EngineComponentProvider) {
 			"adhan-2.mp3",
 			"adhan-3.mp3",
 			"adhan-5.mp3",
+			"adhan-6.mp3",
+			"adhan-7.mp3",
+			"adhan-8.mp3",
+			"adhan-9.mp3",
 			"adhan-wahhab.mp3"},
 	}
 
