@@ -29,6 +29,10 @@ func NewAlAdhanPrayerInfoProvider(locationProvider LocationProvider, logger qmq.
 }
 
 func (a *AlAdhanPrayerInfoProvider) GetNextPrayers() []*qmq.Prayer {
+	if a.locationProvider.GetCity() == "" || a.locationProvider.GetCountry() == "" {
+		a.logger.Panic("City or country not set")
+	}
+
 	result := []*qmq.Prayer{}
 
 	baseURL := "http://api.aladhan.com/v1/calendarByCity"

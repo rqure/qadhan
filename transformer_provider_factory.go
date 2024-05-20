@@ -6,19 +6,29 @@ type TransformerProviderFactory struct{}
 
 func (t *TransformerProviderFactory) Create(components qmq.EngineComponentProvider) qmq.TransformerProvider {
 	transformerProvider := qmq.NewDefaultTransformerProvider()
-	transformerProvider.Set("producer:prayer:time:queue", []qmq.Transformer{
+	transformerProvider.Set("producer:prayer:times", []qmq.Transformer{
 		qmq.NewProtoToAnyTransformer(components.WithLogger()),
-		qmq.NewAnyToMessageTransformer(components.WithLogger()),
+		qmq.NewAnyToMessageTransformer(components.WithLogger(), qmq.AnyToMessageTransformerConfig{
+			SourceProvider: components.WithNameProvider(),
+		}),
+		qmq.NewTracePushTransformer(components.WithLogger()),
 	})
 	transformerProvider.Set("producer:audio-player:file:exchange", []qmq.Transformer{
 		qmq.NewProtoToAnyTransformer(components.WithLogger()),
-		qmq.NewAnyToMessageTransformer(components.WithLogger()),
+		qmq.NewAnyToMessageTransformer(components.WithLogger(), qmq.AnyToMessageTransformerConfig{
+			SourceProvider: components.WithNameProvider(),
+		}),
+		qmq.NewTracePushTransformer(components.WithLogger()),
 	})
 	transformerProvider.Set("producer:audio-player:tts:exchange", []qmq.Transformer{
 		qmq.NewProtoToAnyTransformer(components.WithLogger()),
-		qmq.NewAnyToMessageTransformer(components.WithLogger()),
+		qmq.NewAnyToMessageTransformer(components.WithLogger(), qmq.AnyToMessageTransformerConfig{
+			SourceProvider: components.WithNameProvider(),
+		}),
+		qmq.NewTracePushTransformer(components.WithLogger()),
 	})
-	transformerProvider.Set("consumer:prayer:time:queue", []qmq.Transformer{
+	transformerProvider.Set("consumer:prayer:times", []qmq.Transformer{
+		qmq.NewTracePopTransformer(components.WithLogger()),
 		qmq.NewMessageToAnyTransformer(components.WithLogger()),
 		qmq.NewAnyToProtoTransformer(components.WithLogger(), &qmq.Prayer{}),
 	})
