@@ -51,11 +51,11 @@ func (e *EngineProcessor) Process(p qmq.EngineComponentProvider) {
 				if time.Now().After(nextPrayer.Time.AsTime()) {
 					p.WithLogger().Advise(fmt.Sprintf("It is now time for: %s", nextPrayer.Name))
 
-					p.WithProducer("audio-player:tts").Push(&qmq.TextToSpeechRequest{
+					p.WithProducer("audio-player:cmd:play-tts").Push(&qmq.TextToSpeechRequest{
 						Text: fmt.Sprintf("It is now time for %s", nextPrayer.Name),
 					})
 
-					p.WithProducer("audio-player:file").Push(&qmq.AudioRequest{
+					p.WithProducer("audio-player:cmd:play-file").Push(&qmq.AudioRequest{
 						Filename: AdhanFileSelector.Select(nextPrayer.Name),
 					})
 
@@ -73,11 +73,11 @@ func (e *EngineProcessor) Process(p qmq.EngineComponentProvider) {
 								<-time.After(time.Until(reminderTime))
 
 								if reminderTimeMin == 60 {
-									p.WithProducer("audio-player:tts").Push(&qmq.TextToSpeechRequest{
+									p.WithProducer("audio-player:cmd:play-tts").Push(&qmq.TextToSpeechRequest{
 										Text: fmt.Sprintf("Reminder: %s starts in 1 hour", prayerName),
 									})
 								} else {
-									p.WithProducer("audio-player:tts").Push(&qmq.TextToSpeechRequest{
+									p.WithProducer("audio-player:cmd:play-tts").Push(&qmq.TextToSpeechRequest{
 										Text: fmt.Sprintf("Reminder: %s starts in %d minutes", prayerName, reminderTimeMin),
 									})
 								}

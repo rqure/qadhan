@@ -13,14 +13,14 @@ func (t *TransformerProviderFactory) Create(components qmq.EngineComponentProvid
 		}),
 		qmq.NewTracePushTransformer(components.WithLogger()),
 	})
-	transformerProvider.Set("producer:audio-player:file:exchange", []qmq.Transformer{
+	transformerProvider.Set("producer:audio-player:cmd:play-file:exchange", []qmq.Transformer{
 		qmq.NewProtoToAnyTransformer(components.WithLogger()),
 		qmq.NewAnyToMessageTransformer(components.WithLogger(), qmq.AnyToMessageTransformerConfig{
 			SourceProvider: components.WithNameProvider(),
 		}),
 		qmq.NewTracePushTransformer(components.WithLogger()),
 	})
-	transformerProvider.Set("producer:audio-player:tts:exchange", []qmq.Transformer{
+	transformerProvider.Set("producer:audio-player:cmd:play-tts:exchange", []qmq.Transformer{
 		qmq.NewProtoToAnyTransformer(components.WithLogger()),
 		qmq.NewAnyToMessageTransformer(components.WithLogger(), qmq.AnyToMessageTransformerConfig{
 			SourceProvider: components.WithNameProvider(),
