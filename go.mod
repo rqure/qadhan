@@ -3,7 +3,7 @@ module github.com/rqure/qprayer
 go 1.21.6
 
 require (
-	github.com/rqure/qmq v1.1.19
+	github.com/rqure/qmq v1.1.22
 	google.golang.org/protobuf v1.32.0
 )
 
