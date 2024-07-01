@@ -19,6 +19,7 @@ type PrayerDetails struct {
 
 type PrayerDetailsProviderSignals struct {
 	NextPrayerStarted qdb.Signal
+	NextPrayerInfo    qdb.Signal
 }
 
 type PrayerDetailsProvider struct {
@@ -105,6 +106,8 @@ func (a *PrayerDetailsProvider) DoWork() {
 				currentIndex.Raw = (currentIndex.Raw + 1) % capacity.Raw
 				controller.GetField("Prayer Buffer->CurrentIndex").PushValue(currentIndex)
 				a.Signals.NextPrayerStarted.Emit(nextPrayer.Name.Raw)
+			} else {
+				a.Signals.NextPrayerInfo.Emit(nextPrayer.Name.Raw, nextPrayer.Time.Raw.AsTime())
 			}
 		}
 	}
