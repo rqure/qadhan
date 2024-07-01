@@ -29,35 +29,29 @@ func (a *AdhanPlayer) DoWork() {
 func (a *AdhanPlayer) OnNextPrayerStarted(args ...interface{}) {
 	prayerName := args[0].(string)
 
-	FajrAdhans := qdb.NewEntityFinder(a.db).Find(qdb.SearchCriteria{
+	adhans := qdb.NewEntityFinder(a.db).Find(qdb.SearchCriteria{
 		EntityType: "Adhan",
 		Conditions: []qdb.FieldConditionEval{
-			new(qdb.FieldCondition[int, qdb.Bool]).Where("IsFajr").IsEqualTo(true),
-			new(qdb.FieldCondition[bool, qdb.Bool]).Where("Enabled").IsEqualTo(true),
-		},
-	})
-	OtherAdhans := qdb.NewEntityFinder(a.db).Find(qdb.SearchCriteria{
-		EntityType: "Adhan",
-		Conditions: []qdb.FieldConditionEval{
-			new(qdb.FieldCondition[bool, qdb.Bool]).Where("IsFajr").IsEqualTo(false),
-			new(qdb.FieldCondition[bool, qdb.Bool]).Where("Enabled").IsEqualTo(true),
+			qdb.NewBoolCondition().Where("IsFajr").IsEqualTo(&qdb.Bool{Raw: false}),
+			qdb.NewBoolCondition().Where("Enabled").IsEqualTo(&qdb.Bool{Raw: true}),
 		},
 	})
 
-	var adhans []string
-
-	switch prayerName {
-	case "Fajr":
-		adhans = FajrAdhans
-	default:
-		adhans = OtherAdhans
+	if prayerName == "Fajr" {
+		adhans = qdb.NewEntityFinder(a.db).Find(qdb.SearchCriteria{
+			EntityType: "Adhan",
+			Conditions: []qdb.FieldConditionEval{
+				qdb.NewBoolCondition().Where("IsFajr").IsEqualTo(&qdb.Bool{Raw: true}),
+				qdb.NewBoolCondition().Where("Enabled").IsEqualTo(&qdb.Bool{Raw: true}),
+			},
+		})
 	}
 
 	randomIndex := rand.Intn(len(adhans))
 	adhan := adhans[randomIndex]
-	file := adhan.GetField("AudioFile").PullValue(&qdb.EntityReference{}).(*qdb.EntityReference)
+	fileReference := adhan.GetField("AudioFile").PullValue(&qdb.EntityReference{}).(*qdb.EntityReference)
 
-	if file.Raw == "" {
+	if fileReference.Raw == "" {
 		qdb.Warn("[AdhanPlayer::OnNextPrayerStarted] Adhan (%v) has no audio file configured", adhan)
 		return
 	}
@@ -74,6 +68,6 @@ func (a *AdhanPlayer) OnNextPrayerStarted(args ...interface{}) {
 			Raw: fmt.Sprintf("It is now time for %s", prayerName),
 		})
 
-		audioController.GetField("AudioFile").PushValue(file)
+		audioController.GetField("AudioFile").PushValue(fileReference)
 	}
 }
