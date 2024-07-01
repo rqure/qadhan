@@ -23,6 +23,20 @@ func main() {
 	dbWorker := qdb.NewDatabaseWorker(db)
 	leaderElectionWorker := qdb.NewLeaderElectionWorker(db)
 
+	schemaValidator := qdb.NewSchemaValidator(db)
+
+	schemaValidator.AddEntity("Root", "SchemaUpdateTrigger")
+	schemaValidator.AddEntity("AdhanController", "Country", "City", "BaseURL")
+	schemaValidator.AddEntity("RingBuffer", "Capacity", "CurrentIndex", "EndIndex")
+	schemaValidator.AddEntity("MP3File", "Content", "Description")
+	schemaValidator.AddEntity("Adhan", "AudioFile", "Enabled", "IsFajr")
+	schemaValidator.AddEntity("Prayer", "PrayerName", "StartTime")
+
+	dbWorker.Signals.SchemaUpdated.Connect(qdb.Slot(schemaValidator.OnSchemaUpdated))
+	leaderElectionWorker.AddAvailabilityCriteria(func() bool {
+		return schemaValidator.IsValid()
+	})
+
 	dbWorker.Signals.Connected.Connect(qdb.Slot(leaderElectionWorker.OnDatabaseConnected))
 	dbWorker.Signals.Disconnected.Connect(qdb.Slot(leaderElectionWorker.OnDatabaseDisconnected))
 
