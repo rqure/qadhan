@@ -9,26 +9,31 @@ import (
 	"time"
 
 	qdb "github.com/rqure/qdb/src"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type AudioController struct {
-	Country string
-	City    string
-	BaseURL string
+type PrayerDetails struct {
+	Name *qdb.String
+	Time *qdb.Timestamp
 }
 
-type PrayerDetails struct {
-	Name string
-	Time time.Time
+type PrayerDetailsProviderSignals struct {
+	NextPrayerStarted qdb.Signal
 }
 
 type PrayerDetailsProvider struct {
-	db       qdb.IDatabase
-	isLeader bool
+	db           qdb.IDatabase
+	isLeader     bool
+	tickInterval time.Duration
+	lastTick     time.Time
+	Signals      PrayerDetailsProviderSignals
 }
 
 func NewPrayerDetailsProvider(db qdb.IDatabase) *PrayerDetailsProvider {
-	return &PrayerDetailsProvider{db: db}
+	return &PrayerDetailsProvider{
+		db:           db,
+		tickInterval: 10 * time.Second,
+	}
 }
 
 func (a *PrayerDetailsProvider) OnBecameLeader() {
@@ -51,42 +56,72 @@ func (a *PrayerDetailsProvider) DoWork() {
 	if !a.isLeader {
 		return
 	}
-}
 
-func (a *PrayerDetailsProvider) GetAudioController() *AudioController {
+	if time.Since(a.lastTick) < a.tickInterval {
+		return
+	}
+
+	a.lastTick = time.Now()
 	controllers := qdb.NewEntityFinder(a.db).Find(qdb.SearchCriteria{
 		EntityType: "AdhanController",
 		Conditions: []qdb.FieldConditionEval{},
 	})
 
 	for _, controller := range controllers {
-		country := controller.GetField("Country").PullValue(&qdb.String{}).(*qdb.String).Raw
-		city := controller.GetField("City").PullValue(&qdb.String{}).(*qdb.String).Raw
-		baseUrl := controller.GetField("BaseURL").PullValue(&qdb.String{}).(*qdb.String).Raw
-		return &AudioController{
-			Country: country,
-			City:    city,
-			BaseURL: baseUrl,
+		capacity := controller.GetField("Prayer Buffer->Capacity").PullValue(&qdb.Int{}).(*qdb.Int)
+		currentIndex := controller.GetField("Prayer Buffer->CurrentIndex").PullValue(&qdb.Int{}).(*qdb.Int)
+		endIndex := controller.GetField("Prayer Buffer->EndIndex").PullValue(&qdb.Int{}).(*qdb.Int)
+
+		if currentIndex.Raw == endIndex.Raw {
+			qdb.Info("[PrayerDetailsProvider::DoWork] Prayer buffer is empty, querying next prayers")
+			country := controller.GetField("Country").PullValue(&qdb.String{}).(*qdb.String)
+			city := controller.GetField("City").PullValue(&qdb.String{}).(*qdb.String)
+			baseUrl := controller.GetField("BaseURL").PullValue(&qdb.String{}).(*qdb.String)
+			prayerDetails := a.QueryNextPrayers(baseUrl.Raw, country.Raw, city.Raw)
+
+			for _, prayer := range prayerDetails {
+				if (endIndex.Raw+1)%capacity.Raw == currentIndex.Raw {
+					qdb.Warn("[PrayerDetailsProvider::DoWork] Prayer buffer is full")
+					break
+				}
+
+				controller.GetField(fmt.Sprintf("Prayer Buffer->%d->PrayerName", endIndex.Raw)).PushValue(prayer.Name)
+				controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", endIndex.Raw)).PushValue(prayer.Time)
+
+				endIndex.Raw = (endIndex.Raw + 1) % capacity.Raw
+				controller.GetField("Prayer Buffer->EndIndex").PushValue(endIndex)
+			}
+		} else {
+			nextPrayer := &PrayerDetails{
+				Name: &qdb.String{},
+				Time: &qdb.Timestamp{},
+			}
+
+			controller.GetField(fmt.Sprintf("Prayer Buffer->%d->PrayerName", currentIndex.Raw)).PullValue(nextPrayer.Name)
+			controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", currentIndex.Raw)).PullValue(nextPrayer.Time)
+
+			if time.Now().After(nextPrayer.Time.Raw.AsTime()) {
+				qdb.Info("[PrayerDetailsProvider::DoWork] Next prayer '%s' has started", nextPrayer.Name.Raw)
+				currentIndex.Raw = (currentIndex.Raw + 1) % capacity.Raw
+				controller.GetField("Prayer Buffer->CurrentIndex").PushValue(currentIndex)
+				a.Signals.NextPrayerStarted.Emit(nextPrayer.Name.Raw)
+			}
 		}
 	}
-
-	qdb.Error("[PrayerDetailsProvider::GetAudioController] No AudioController entity exists in the database")
-	return nil
 }
 
-func (a *PrayerDetailsProvider) QueryNextPrayers() []*PrayerDetails {
-	opts := a.GetAudioController()
-	if opts == nil || opts.City == "" || opts.Country == "" || opts.BaseURL == "" {
-		qdb.Error("[PrayerDetailsProvider::QueryNextPrayers] Query options are invalid (%v)", opts)
+func (a *PrayerDetailsProvider) QueryNextPrayers(baseUrl, country, city string) []*PrayerDetails {
+	if baseUrl == "" || country == "" || city == "" {
+		qdb.Error("[PrayerDetailsProvider::QueryNextPrayers] Query options are invalid")
 		return []*PrayerDetails{}
 	}
 
 	result := []*PrayerDetails{}
 	params := url.Values{}
-	params.Add("city", opts.City)
-	params.Add("country", opts.Country)
+	params.Add("city", city)
+	params.Add("country", country)
 
-	resp, err := http.Get(fmt.Sprintf("%s?%s", opts.BaseURL, params.Encode()))
+	resp, err := http.Get(fmt.Sprintf("%s?%s", baseUrl, params.Encode()))
 	if err != nil {
 		qdb.Error("[PrayerDetailsProvider::QueryNextPrayers] Failed to fetch prayer times: %v", err)
 		return result
@@ -143,15 +178,15 @@ func (a *PrayerDetailsProvider) QueryNextPrayers() []*PrayerDetails {
 
 			if time.Now().Before(timeParsed) {
 				result = append(result, &PrayerDetails{
-					Name: prayer,
-					Time: timeParsed,
+					Name: &qdb.String{Raw: prayer},
+					Time: &qdb.Timestamp{Raw: timestamppb.New(timeParsed)},
 				})
 			}
 		}
 	}
 
 	sort.Slice(result, func(i, j int) bool {
-		return result[i].Time.Before(result[j].Time)
+		return result[i].Time.Raw.AsTime().Before(result[j].Time.Raw.AsTime())
 	})
 
 	return result
