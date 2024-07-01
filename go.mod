@@ -4,7 +4,6 @@ go 1.21.6
 
 require (
 	github.com/rqure/qdb v1.2.38
-	github.com/rqure/qmq v1.1.19
 	google.golang.org/protobuf v1.32.0
 )
 
