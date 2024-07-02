@@ -22,6 +22,9 @@ func main() {
 
 	dbWorker := qdb.NewDatabaseWorker(db)
 	leaderElectionWorker := qdb.NewLeaderElectionWorker(db)
+	adhanPlayer := NewAdhanPlayer(db)
+	prayerDetailsProvider := NewPrayerDetailsProvider(db)
+	reminderPlayer := NewReminderPlayer(db)
 
 	schemaValidator := qdb.NewSchemaValidator(db)
 
@@ -41,13 +44,13 @@ func main() {
 	dbWorker.Signals.Connected.Connect(qdb.Slot(leaderElectionWorker.OnDatabaseConnected))
 	dbWorker.Signals.Disconnected.Connect(qdb.Slot(leaderElectionWorker.OnDatabaseDisconnected))
 
-	// leaderElectionWorker.Signals.BecameLeader.Connect(qdb.Slot(audioFileRequestHandler.OnBecameLeader))
-	// leaderElectionWorker.Signals.BecameFollower.Connect(qdb.Slot(audioFileRequestHandler.OnLostLeadership))
-	// leaderElectionWorker.Signals.BecameUnavailable.Connect(qdb.Slot(audioFileRequestHandler.OnLostLeadership))
+	leaderElectionWorker.Signals.BecameLeader.Connect(qdb.Slot(prayerDetailsProvider.OnBecameLeader))
+	leaderElectionWorker.Signals.BecameFollower.Connect(qdb.Slot(prayerDetailsProvider.OnLostLeadership))
+	leaderElectionWorker.Signals.BecameUnavailable.Connect(qdb.Slot(prayerDetailsProvider.OnLostLeadership))
 
-	// leaderElectionWorker.Signals.BecameLeader.Connect(qdb.Slot(textToSpeechRequestHandler.OnBecameLeader))
-	// leaderElectionWorker.Signals.BecameFollower.Connect(qdb.Slot(textToSpeechRequestHandler.OnLostLeadership))
-	// leaderElectionWorker.Signals.BecameUnavailable.Connect(qdb.Slot(textToSpeechRequestHandler.OnLostLeadership))
+	prayerDetailsProvider.Signals.NextPrayerStarted.Connect(qdb.SlotWithArgs(adhanPlayer.OnNextPrayerStarted))
+	prayerDetailsProvider.Signals.NextPrayerStarted.Connect(qdb.SlotWithArgs(reminderPlayer.OnNextPrayerStarted))
+	prayerDetailsProvider.Signals.NextPrayerInfo.Connect(qdb.SlotWithArgs(reminderPlayer.OnNextPrayerInfo))
 
 	// Create a new application configuration
 	config := qdb.ApplicationConfig{
