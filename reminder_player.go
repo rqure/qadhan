@@ -47,7 +47,7 @@ func (a *ReminderPlayer) OnNextPrayerInfo(args ...interface{}) {
 		EntityType: "PrayerReminder",
 		Conditions: []qdb.FieldConditionEval{
 			qdb.NewBoolCondition().Where("HasPlayed").IsEqualTo(&qdb.Bool{Raw: false}),
-			qdb.NewIntCondition().Where("MinutesBefore").IsLessThanOrEqualTo(&qdb.Int{Raw: int64(time.Until(prayerTime).Minutes())}),
+			qdb.NewIntCondition().Where("MinutesBefore").IsGreaterThanOrEqualTo(&qdb.Int{Raw: int64(time.Until(prayerTime).Minutes())}),
 		},
 	})
 
