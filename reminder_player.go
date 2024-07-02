@@ -27,7 +27,16 @@ func (a *ReminderPlayer) DoWork() {
 }
 
 func (a *ReminderPlayer) OnNextPrayerStarted(args ...interface{}) {
+	reminders := qdb.NewEntityFinder(a.db).Find(qdb.SearchCriteria{
+		EntityType: "PrayerReminder",
+		Conditions: []qdb.FieldConditionEval{
+			qdb.NewBoolCondition().Where("HasPlayed").IsEqualTo(&qdb.Bool{Raw: true}),
+		},
+	})
 
+	for _, reminder := range reminders {
+		reminder.GetField("HasPlayed").PushValue(&qdb.Bool{Raw: false})
+	}
 }
 
 func (a *ReminderPlayer) OnNextPrayerInfo(args ...interface{}) {
