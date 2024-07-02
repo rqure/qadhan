@@ -89,6 +89,8 @@ func (a *PrayerDetailsProvider) DoWork() {
 				controller.GetField(fmt.Sprintf("Prayer Buffer->%d->PrayerName", endIndex.Raw)).PushValue(prayer.Name)
 				controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", endIndex.Raw)).PushValue(prayer.Time)
 
+				qdb.Info("[PrayerDetailsProvider::DoWork] Added prayer '%s' (startTime=%s) to the buffer (endIndex=%d)", prayer.Name.Raw, prayer.Time.Raw.AsTime().Format(time.RFC3339), endIndex.Raw)
+
 				endIndex.Raw = (endIndex.Raw + 1) % capacity.Raw
 				controller.GetField("Prayer Buffer->EndIndex").PushValue(endIndex)
 			}
