@@ -58,6 +58,9 @@ func main() {
 		Workers: []qdb.IWorker{
 			dbWorker,
 			leaderElectionWorker,
+			prayerDetailsProvider,
+			adhanPlayer,
+			reminderPlayer,
 		},
 	}
 
