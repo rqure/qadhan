@@ -31,6 +31,7 @@ func main() {
 	schemaValidator.AddEntity("MP3File", "Content", "Description")
 	schemaValidator.AddEntity("Adhan", "AudioFile", "Enabled", "IsFajr")
 	schemaValidator.AddEntity("Prayer", "PrayerName", "StartTime")
+	schemaValidator.AddEntity("PrayerReminder", "MinutesBefore", "TextToSpeech", "HasPlayed")
 
 	dbWorker.Signals.SchemaUpdated.Connect(qdb.Slot(schemaValidator.OnSchemaUpdated))
 	leaderElectionWorker.AddAvailabilityCriteria(func() bool {

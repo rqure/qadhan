@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"math/rand"
 
 	qdb "github.com/rqure/qdb/src"
@@ -64,10 +63,6 @@ func (a *AdhanPlayer) OnNextPrayerStarted(args ...interface{}) {
 		Conditions: []qdb.FieldConditionEval{},
 	})
 	for _, audioController := range audioControllers {
-		audioController.GetField("TextToSpeech").PushValue(&qdb.String{
-			Raw: fmt.Sprintf("It is now time for %s", prayerName),
-		})
-
 		audioController.GetField("AudioFile").PushValue(fileReference)
 	}
 }
