@@ -45,8 +45,7 @@ func main() {
 	dbWorker.Signals.Disconnected.Connect(qdb.Slot(leaderElectionWorker.OnDatabaseDisconnected))
 
 	leaderElectionWorker.Signals.BecameLeader.Connect(qdb.Slot(prayerDetailsProvider.OnBecameLeader))
-	leaderElectionWorker.Signals.BecameFollower.Connect(qdb.Slot(prayerDetailsProvider.OnLostLeadership))
-	leaderElectionWorker.Signals.BecameUnavailable.Connect(qdb.Slot(prayerDetailsProvider.OnLostLeadership))
+	leaderElectionWorker.Signals.LosingLeadership.Connect(qdb.Slot(prayerDetailsProvider.OnLostLeadership))
 
 	prayerDetailsProvider.Signals.NextPrayerStarted.Connect(qdb.SlotWithArgs(adhanPlayer.OnNextPrayerStarted))
 	prayerDetailsProvider.Signals.NextPrayerStarted.Connect(qdb.SlotWithArgs(reminderPlayer.OnNextPrayerStarted))
