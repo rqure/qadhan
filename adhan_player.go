@@ -48,21 +48,22 @@ func (a *AdhanPlayer) OnNextPrayerStarted(args ...interface{}) {
 
 	randomIndex := rand.Intn(len(adhans))
 	adhan := adhans[randomIndex]
-	fileReference := adhan.GetField("AudioFile").PullValue(&qdb.EntityReference{}).(*qdb.EntityReference)
+	fileReference := adhan.GetField("AudioFile").PullEntityReference()
 
-	if fileReference.Raw == "" {
+	if fileReference == "" {
 		qdb.Warn("[AdhanPlayer::OnNextPrayerStarted] Adhan (%v) has no audio file configured", adhan)
 		return
 	}
 
-	fileDescription := adhan.GetField("AudioFile->Description").PullValue(&qdb.String{}).(*qdb.String).Raw
+	fileDescription := adhan.GetField("AudioFile->Description").PullString()
 	qdb.Info("[AdhanPlayer::OnNextPrayerStarted] Playing adhan: %s", fileDescription)
 
 	audioControllers := qdb.NewEntityFinder(a.db).Find(qdb.SearchCriteria{
 		EntityType: "AudioController",
 		Conditions: []qdb.FieldConditionEval{},
 	})
+
 	for _, audioController := range audioControllers {
-		audioController.GetField("AudioFile").PushValue(fileReference)
+		audioController.GetField("AudioFile").PushString(fileReference)
 	}
 }

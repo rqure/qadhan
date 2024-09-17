@@ -69,11 +69,11 @@ func (a *PrayerDetailsProvider) DoWork() {
 	})
 
 	for _, controller := range controllers {
-		capacity := controller.GetField("Prayer Buffer->Capacity").PullValue(&qdb.Int{}).(*qdb.Int)
-		currentIndex := controller.GetField("Prayer Buffer->CurrentIndex").PullValue(&qdb.Int{}).(*qdb.Int)
-		endIndex := controller.GetField("Prayer Buffer->EndIndex").PullValue(&qdb.Int{}).(*qdb.Int)
+		capacity := controller.GetField("Prayer Buffer->Capacity").PullInt()
+		currentIndex := controller.GetField("Prayer Buffer->CurrentIndex").PullInt()
+		endIndex := controller.GetField("Prayer Buffer->EndIndex").PullInt()
 
-		if currentIndex.Raw == endIndex.Raw {
+		if currentIndex == endIndex {
 			qdb.Info("[PrayerDetailsProvider::DoWork] Prayer buffer is empty, querying next prayers")
 			country := controller.GetField("Country").PullValue(&qdb.String{}).(*qdb.String)
 			city := controller.GetField("City").PullValue(&qdb.String{}).(*qdb.String)
@@ -81,18 +81,18 @@ func (a *PrayerDetailsProvider) DoWork() {
 			prayerDetails := a.QueryNextPrayers(baseUrl.Raw, country.Raw, city.Raw)
 
 			for _, prayer := range prayerDetails {
-				if (endIndex.Raw+1)%capacity.Raw == currentIndex.Raw {
+				if (endIndex+1)%capacity == currentIndex {
 					qdb.Warn("[PrayerDetailsProvider::DoWork] Prayer buffer is full")
 					break
 				}
 
-				controller.GetField(fmt.Sprintf("Prayer Buffer->%d->PrayerName", endIndex.Raw)).PushValue(prayer.Name)
-				controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", endIndex.Raw)).PushValue(prayer.Time)
+				controller.GetField(fmt.Sprintf("Prayer Buffer->%d->PrayerName", endIndex)).PushValue(prayer.Name)
+				controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", endIndex)).PushValue(prayer.Time)
 
-				qdb.Info("[PrayerDetailsProvider::DoWork] Added prayer '%s' (startTime=%s) to the buffer (endIndex=%d)", prayer.Name.Raw, prayer.Time.Raw.AsTime().Format(time.RFC3339), endIndex.Raw)
+				qdb.Info("[PrayerDetailsProvider::DoWork] Added prayer '%s' (startTime=%s) to the buffer (endIndex=%d)", prayer.Name.Raw, prayer.Time.Raw.AsTime().Format(time.RFC3339), endIndex)
 
-				endIndex.Raw = (endIndex.Raw + 1) % capacity.Raw
-				controller.GetField("Prayer Buffer->EndIndex").PushValue(endIndex)
+				endIndex = (endIndex + 1) % capacity
+				controller.GetField("Prayer Buffer->EndIndex").PushInt(endIndex)
 			}
 		} else {
 			nextPrayer := &PrayerDetails{
@@ -100,13 +100,13 @@ func (a *PrayerDetailsProvider) DoWork() {
 				Time: &qdb.Timestamp{},
 			}
 
-			controller.GetField(fmt.Sprintf("Prayer Buffer->%d->PrayerName", currentIndex.Raw)).PullValue(nextPrayer.Name)
-			controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", currentIndex.Raw)).PullValue(nextPrayer.Time)
+			controller.GetField(fmt.Sprintf("Prayer Buffer->%d->PrayerName", currentIndex)).PullValue(nextPrayer.Name)
+			controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", currentIndex)).PullValue(nextPrayer.Time)
 
 			if time.Now().After(nextPrayer.Time.Raw.AsTime()) {
 				qdb.Info("[PrayerDetailsProvider::DoWork] Next prayer '%s' has started", nextPrayer.Name.Raw)
-				currentIndex.Raw = (currentIndex.Raw + 1) % capacity.Raw
-				controller.GetField("Prayer Buffer->CurrentIndex").PushValue(currentIndex)
+				currentIndex = (currentIndex + 1) % capacity
+				controller.GetField("Prayer Buffer->CurrentIndex").PushInt(currentIndex)
 				a.Signals.NextPrayerStarted.Emit(nextPrayer.Name.Raw)
 			} else {
 				a.Signals.NextPrayerInfo.Emit(nextPrayer.Name.Raw, nextPrayer.Time.Raw.AsTime())

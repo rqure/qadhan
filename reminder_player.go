@@ -52,7 +52,7 @@ func (a *ReminderPlayer) OnNextPrayerInfo(args ...interface{}) {
 	})
 
 	for _, reminder := range reminders {
-		textToSpeech := reminder.GetField("TextToSpeech").PullValue(&qdb.String{}).(*qdb.String).Raw
+		textToSpeech := reminder.GetField("TextToSpeech").PullString()
 		if textToSpeech == "" {
 			continue
 		}
