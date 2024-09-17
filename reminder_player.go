@@ -90,6 +90,11 @@ func (a *ReminderPlayer) OnNextPrayerInfo(args ...interface{}) {
 					Field: "EmailAlert",
 					Value: qdb.NewBoolValue(strings.Contains(os.Getenv("ALERTS"), "EMAIL")),
 				},
+				{
+					Id:    alertController.GetId(),
+					Field: "SendTrigger",
+					Value: qdb.NewIntValue(0),
+				},
 			})
 		}
 
