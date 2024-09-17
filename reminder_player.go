@@ -68,7 +68,6 @@ func (a *ReminderPlayer) OnNextPrayerInfo(args ...interface{}) {
 		})
 
 		for _, alertController := range alertControllers {
-			// alertController.GetField("TextToSpeech").PushValue(&qdb.String{Raw: textToSpeech})
 			a.db.Write([]*qdb.DatabaseRequest{
 				{
 					Id:    alertController.GetId(),
