@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"strings"
 	"time"
 
@@ -56,19 +57,42 @@ func (a *ReminderPlayer) OnNextPrayerInfo(args ...interface{}) {
 		if textToSpeech == "" {
 			continue
 		}
+
 		textToSpeech = strings.ReplaceAll(textToSpeech, "{Prayer}", prayerName)
 
 		qdb.Info("[ReminderPlayer::OnNextPrayerInfo] Playing reminder: %s", reminder)
 
-		audioControllers := qdb.NewEntityFinder(a.db).Find(qdb.SearchCriteria{
-			EntityType: "AudioController",
+		alertControllers := qdb.NewEntityFinder(a.db).Find(qdb.SearchCriteria{
+			EntityType: "AlertController",
 			Conditions: []qdb.FieldConditionEval{},
 		})
 
-		for _, audioController := range audioControllers {
-			audioController.GetField("TextToSpeech").PushValue(&qdb.String{Raw: textToSpeech})
+		for _, alertController := range alertControllers {
+			// alertController.GetField("TextToSpeech").PushValue(&qdb.String{Raw: textToSpeech})
+			a.db.Write([]*qdb.DatabaseRequest{
+				{
+					Id:    alertController.GetId(),
+					Field: "ApplicationName",
+					Value: qdb.NewStringValue(os.Getenv("QDB_APP_NAME")),
+				},
+				{
+					Id:    alertController.GetId(),
+					Field: "Description",
+					Value: qdb.NewStringValue(textToSpeech),
+				},
+				{
+					Id:    alertController.GetId(),
+					Field: "TTSAlert",
+					Value: qdb.NewBoolValue(strings.Contains(os.Getenv("ALERTS"), "TTS")),
+				},
+				{
+					Id:    alertController.GetId(),
+					Field: "EmailAlert",
+					Value: qdb.NewBoolValue(strings.Contains(os.Getenv("ALERTS"), "EMAIL")),
+				},
+			})
 		}
 
-		reminder.GetField("HasPlayed").PushValue(&qdb.Bool{Raw: true})
+		reminder.GetField("HasPlayed").PushBool(true)
 	}
 }
