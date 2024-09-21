@@ -64,6 +64,6 @@ func (a *AdhanPlayer) OnNextPrayerStarted(args ...interface{}) {
 	})
 
 	for _, audioController := range audioControllers {
-		audioController.GetField("AudioFile").PushString(fileReference)
+		audioController.GetField("AudioFile").PushEntityReference(fileReference)
 	}
 }
