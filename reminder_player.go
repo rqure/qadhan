@@ -72,7 +72,7 @@ func (a *ReminderPlayer) OnNextPrayerInfo(args ...interface{}) {
 				{
 					Id:    alertController.GetId(),
 					Field: "ApplicationName",
-					Value: qdb.NewStringValue(os.Getenv("QDB_APP_NAME")),
+					Value: qdb.NewStringValue(qdb.GetApplicationName()),
 				},
 				{
 					Id:    alertController.GetId(),
