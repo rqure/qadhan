@@ -3,8 +3,8 @@ module github.com/rqure/qprayer
 go 1.22
 
 require (
-	github.com/rqure/qdb v1.2.84
-	google.golang.org/protobuf v1.35.1
+	github.com/rqure/qdb v1.2.85
+	google.golang.org/protobuf v1.35.2
 )
 
 require (
