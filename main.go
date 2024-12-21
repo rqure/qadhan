@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 
+	qdb "github.com/rqure/qdb/src"
 	"github.com/rqure/qlib/pkg/app"
 	"github.com/rqure/qlib/pkg/app/workers"
 	"github.com/rqure/qlib/pkg/data/store"
@@ -18,15 +19,15 @@ func getDatabaseAddress() string {
 }
 
 func main() {
-	s := store.NewWeb(store.WebConfig{
+	db := store.NewWeb(store.WebConfig{
 		Address: getDatabaseAddress(),
 	})
 
-	storeWorker := workers.NewStore(s)
-	leadershipWorker := workers.NewLeadership(s)
-	adhanPlayer := NewAdhanPlayer(s)
-	prayerDetailsProvider := NewPrayerDetailsProvider(s)
-	reminderPlayer := NewReminderPlayer(s)
+	storeWorker := workers.NewStore(db)
+	leadershipWorker := workers.NewLeadership(db)
+	adhanPlayer := NewAdhanPlayer(db)
+	prayerDetailsProvider := NewPrayerDetailsProvider(db)
+	reminderPlayer := NewReminderPlayer(db)
 
 	schemaValidator := leadershipWorker.GetEntityFieldValidator()
 
@@ -44,15 +45,23 @@ func main() {
 	leadershipWorker.BecameLeader().Connect(prayerDetailsProvider.OnBecameLeader)
 	leadershipWorker.LosingLeadership().Connect(prayerDetailsProvider.OnLostLeadership)
 
-	prayerDetailsProvider.NextPrayerStarted.Connect(adhanPlayer.OnNextPrayerStarted)
-	prayerDetailsProvider.NextPrayerStarted.Connect(reminderPlayer.OnNextPrayerStarted)
-	prayerDetailsProvider.NextPrayerInfo.Connect(reminderPlayer.OnNextPrayerInfo)
+	prayerDetailsProvider.Signals.NextPrayerStarted.Connect(adhanPlayer.OnNextPrayerStarted)
+	prayerDetailsProvider.Signals.NextPrayerStarted.Connect(reminderPlayer.OnNextPrayerStarted)
+	prayerDetailsProvider.Signals.NextPrayerInfo.Connect(reminderPlayer.OnNextPrayerInfo)
 
-	a := app.NewApplication("adhan")
-	a.AddWorker(storeWorker)
-	a.AddWorker(leadershipWorker)
-	a.AddWorker(prayerDetailsProvider)
-	a.AddWorker(adhanPlayer)
-	a.AddWorker(reminderPlayer)
-	a.Execute()
+	// Create a new application configuration
+	config := qdb.ApplicationConfig{
+		Name: "adhan",
+		Workers: []qdb.IWorker{
+			storeWorker,
+			leadershipWorker,
+			prayerDetailsProvider,
+			adhanPlayer,
+			reminderPlayer,
+		},
+	}
+
+	app := app.NewApplication(config)
+
+	app.Execute()
 }

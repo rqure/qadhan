@@ -4,6 +4,7 @@ import (
 	"context"
 	"math/rand"
 
+	qdb "github.com/rqure/qdb/src"
 	"github.com/rqure/qlib/pkg/app"
 	"github.com/rqure/qlib/pkg/data"
 	"github.com/rqure/qlib/pkg/data/query"
@@ -16,7 +17,7 @@ type AdhanPlayer struct {
 
 func NewAdhanPlayer(store data.Store) *AdhanPlayer {
 	return &AdhanPlayer{
-		store: store,
+		db: db,
 	}
 }
 
@@ -29,21 +30,25 @@ func (a *AdhanPlayer) Deinit(context.Context) {
 func (a *AdhanPlayer) DoWork(context.Context) {
 }
 
-func (a *AdhanPlayer) OnNextPrayerStarted(ctx context.Context, args ...interface{}) {
+func (a *AdhanPlayer) OnNextPrayerStarted(args ...interface{}) {
 	prayerName := args[0].(string)
 
-	adhans := query.New(a.store).
-		ForType("Adhan").
-		Where("IsFajr").Equals(false).
-		Where("Enabled").Equals(true).
-		Execute(ctx)
+	adhans := query.New(a.db).Find(qdb.SearchCriteria{
+		EntityType: "Adhan",
+		Conditions: []qdb.FieldConditionEval{
+			qdb.NewBoolCondition().Where("IsFajr").IsEqualTo(&qdb.Bool{Raw: false}),
+			qdb.NewBoolCondition().Where("Enabled").IsEqualTo(&qdb.Bool{Raw: true}),
+		},
+	})
 
 	if prayerName == "Fajr" {
-		adhans = query.New(a.store).
-			ForType("Adhan").
-			Where("IsFajr").Equals(true).
-			Where("Enabled").Equals(true).
-			Execute(ctx)
+		adhans = query.New(a.db).Find(qdb.SearchCriteria{
+			EntityType: "Adhan",
+			Conditions: []qdb.FieldConditionEval{
+				qdb.NewBoolCondition().Where("IsFajr").IsEqualTo(&qdb.Bool{Raw: true}),
+				qdb.NewBoolCondition().Where("Enabled").IsEqualTo(&qdb.Bool{Raw: true}),
+			},
+		})
 	}
 
 	randomIndex := rand.Intn(len(adhans))
@@ -58,7 +63,10 @@ func (a *AdhanPlayer) OnNextPrayerStarted(ctx context.Context, args ...interface
 	fileDescription := adhan.GetField("AudioFile->Description").ReadString(ctx)
 	log.Info("Playing adhan: %s", fileDescription)
 
-	audioControllers := query.New(a.store).ForType("AudioController").Execute(ctx)
+	audioControllers := query.New(a.db).Find(qdb.SearchCriteria{
+		EntityType: "AudioController",
+		Conditions: []qdb.FieldConditionEval{},
+	})
 
 	for _, audioController := range audioControllers {
 		audioController.GetField("AudioFile").WriteEntityReference(ctx, fileReference)

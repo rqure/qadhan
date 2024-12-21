@@ -9,16 +9,22 @@ import (
 	"sort"
 	"time"
 
+	qdb "github.com/rqure/qdb/src"
 	"github.com/rqure/qlib/pkg/app"
 	"github.com/rqure/qlib/pkg/data"
 	"github.com/rqure/qlib/pkg/data/query"
 	"github.com/rqure/qlib/pkg/log"
-	"github.com/rqure/qlib/pkg/signalslots"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type PrayerDetails struct {
-	Name string
-	Time time.Time
+	Name *qdb.String
+	Time *qdb.Timestamp
+}
+
+type PrayerDetailsProviderSignals struct {
+	NextPrayerStarted qdb.Signal
+	NextPrayerInfo    qdb.Signal
 }
 
 type PrayerDetailsProvider struct {
@@ -26,14 +32,12 @@ type PrayerDetailsProvider struct {
 	isLeader     bool
 	tickInterval time.Duration
 	lastTick     time.Time
-
-	NextPrayerStarted signalslots.Signal
-	NextPrayerInfo    signalslots.Signal
+	Signals      PrayerDetailsProviderSignals
 }
 
 func NewPrayerDetailsProvider(store data.Store) *PrayerDetailsProvider {
 	return &PrayerDetailsProvider{
-		store:        store,
+		db:           db,
 		tickInterval: 10 * time.Second,
 	}
 }
@@ -54,7 +58,7 @@ func (a *PrayerDetailsProvider) Deinit(context.Context) {
 
 }
 
-func (a *PrayerDetailsProvider) DoWork(ctx context.Context) {
+func (a *PrayerDetailsProvider) DoWork(context.Context) {
 	if !a.isLeader {
 		return
 	}
@@ -64,9 +68,10 @@ func (a *PrayerDetailsProvider) DoWork(ctx context.Context) {
 	}
 
 	a.lastTick = time.Now()
-	controllers := query.New(a.store).
-		ForType("AdhanController").
-		Execute(ctx)
+	controllers := query.New(a.db).Find(qdb.SearchCriteria{
+		EntityType: "AdhanController",
+		Conditions: []qdb.FieldConditionEval{},
+	})
 
 	for _, controller := range controllers {
 		capacity := controller.GetField("Prayer Buffer->Capacity").ReadInt(ctx)
@@ -75,10 +80,10 @@ func (a *PrayerDetailsProvider) DoWork(ctx context.Context) {
 
 		if currentIndex == endIndex {
 			log.Info("Prayer buffer is empty, querying next prayers")
-			country := controller.GetField("Country").ReadString(ctx)
-			city := controller.GetField("City").ReadString(ctx)
-			baseUrl := controller.GetField("BaseURL").ReadString(ctx)
-			prayerDetails := a.QueryNextPrayers(baseUrl, country, city)
+			country := controller.GetField("Country").PullValue(&qdb.String{}).(*qdb.String)
+			city := controller.GetField("City").PullValue(&qdb.String{}).(*qdb.String)
+			baseUrl := controller.GetField("BaseURL").PullValue(&qdb.String{}).(*qdb.String)
+			prayerDetails := a.QueryNextPrayers(baseUrl.Raw, country.Raw, city.Raw)
 
 			for _, prayer := range prayerDetails {
 				if (endIndex+1)%capacity == currentIndex {
@@ -86,27 +91,30 @@ func (a *PrayerDetailsProvider) DoWork(ctx context.Context) {
 					break
 				}
 
-				controller.GetField(fmt.Sprintf("Prayer Buffer->%d->PrayerName", endIndex)).WriteString(ctx, prayer.Name)
-				controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", endIndex)).WriteTimestamp(ctx, prayer.Time)
+				controller.GetField(fmt.Sprintf("Prayer Buffer->%d->PrayerName", endIndex)).WriteValue(ctx, prayer.Name)
+				controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", endIndex)).WriteValue(ctx, prayer.Time)
 
-				log.Info("Added prayer '%s' (startTime=%s) to the buffer (endIndex=%d)", prayer.Name, prayer.Time.Format(time.RFC3339), endIndex)
+				log.Info("Added prayer '%s' (startTime=%s) to the buffer (endIndex=%d)", prayer.Name.Raw, prayer.Time.Raw.AsTime().Format(time.RFC3339), endIndex)
 
 				endIndex = (endIndex + 1) % capacity
 				controller.GetField("Prayer Buffer->EndIndex").WriteInt(ctx, endIndex)
 			}
 		} else {
-			nextPrayer := &PrayerDetails{}
+			nextPrayer := &PrayerDetails{
+				Name: &qdb.String{},
+				Time: &qdb.Timestamp{},
+			}
 
-			nextPrayer.Name = controller.GetField(fmt.Sprintf("Prayer Buffer->%d->PrayerName", currentIndex)).ReadString(ctx)
-			nextPrayer.Time = controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", currentIndex)).ReadTimestamp(ctx)
+			controller.GetField(fmt.Sprintf("Prayer Buffer->%d->PrayerName", currentIndex)).PullValue(nextPrayer.Name)
+			controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", currentIndex)).PullValue(nextPrayer.Time)
 
-			if time.Now().After(nextPrayer.Time) {
-				log.Info("Next prayer '%s' has started", nextPrayer.Name)
+			if time.Now().After(nextPrayer.Time.Raw.AsTime()) {
+				log.Info("Next prayer '%s' has started", nextPrayer.Name.Raw)
 				currentIndex = (currentIndex + 1) % capacity
 				controller.GetField("Prayer Buffer->CurrentIndex").WriteInt(ctx, currentIndex)
-				a.NextPrayerStarted.Emit(nextPrayer.Name)
+				a.Signals.NextPrayerStarted.Emit(nextPrayer.Name.Raw)
 			} else {
-				a.NextPrayerInfo.Emit(nextPrayer.Name, nextPrayer.Time)
+				a.Signals.NextPrayerInfo.Emit(nextPrayer.Name.Raw, nextPrayer.Time.Raw.AsTime())
 			}
 		}
 	}
@@ -180,15 +188,15 @@ func (a *PrayerDetailsProvider) QueryNextPrayers(baseUrl, country, city string) 
 
 			if time.Now().Before(timeParsed) {
 				result = append(result, &PrayerDetails{
-					Name: prayer,
-					Time: timeParsed,
+					Name: &qdb.String{Raw: prayer},
+					Time: &qdb.Timestamp{Raw: timestamppb.New(timeParsed)},
 				})
 			}
 		}
 	}
 
 	sort.Slice(result, func(i, j int) bool {
-		return result[i].Time.Before(result[j].Time)
+		return result[i].Time.Raw.AsTime().Before(result[j].Time.Raw.AsTime())
 	})
 
 	return result
