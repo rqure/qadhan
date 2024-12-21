@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 
-	qdb "github.com/rqure/qdb/src"
 	"github.com/rqure/qlib/pkg/app"
 	"github.com/rqure/qlib/pkg/app/workers"
 	"github.com/rqure/qlib/pkg/data/store"
@@ -19,15 +18,15 @@ func getDatabaseAddress() string {
 }
 
 func main() {
-	db := store.NewWeb(store.WebConfig{
+	s := store.NewWeb(store.WebConfig{
 		Address: getDatabaseAddress(),
 	})
 
-	storeWorker := workers.NewStore(db)
-	leadershipWorker := workers.NewLeadership(db)
-	adhanPlayer := NewAdhanPlayer(db)
-	prayerDetailsProvider := NewPrayerDetailsProvider(db)
-	reminderPlayer := NewReminderPlayer(db)
+	storeWorker := workers.NewStore(s)
+	leadershipWorker := workers.NewLeadership(s)
+	adhanPlayer := NewAdhanPlayer(s)
+	prayerDetailsProvider := NewPrayerDetailsProvider(s)
+	reminderPlayer := NewReminderPlayer(s)
 
 	schemaValidator := leadershipWorker.GetEntityFieldValidator()
 
@@ -45,23 +44,15 @@ func main() {
 	leadershipWorker.BecameLeader().Connect(prayerDetailsProvider.OnBecameLeader)
 	leadershipWorker.LosingLeadership().Connect(prayerDetailsProvider.OnLostLeadership)
 
-	prayerDetailsProvider.Signals.NextPrayerStarted.Connect(adhanPlayer.OnNextPrayerStarted)
-	prayerDetailsProvider.Signals.NextPrayerStarted.Connect(reminderPlayer.OnNextPrayerStarted)
-	prayerDetailsProvider.Signals.NextPrayerInfo.Connect(reminderPlayer.OnNextPrayerInfo)
+	prayerDetailsProvider.NextPrayerStarted.Connect(adhanPlayer.OnNextPrayerStarted)
+	prayerDetailsProvider.NextPrayerStarted.Connect(reminderPlayer.OnNextPrayerStarted)
+	prayerDetailsProvider.NextPrayerInfo.Connect(reminderPlayer.OnNextPrayerInfo)
 
-	// Create a new application configuration
-	config := qdb.ApplicationConfig{
-		Name: "adhan",
-		Workers: []qdb.IWorker{
-			storeWorker,
-			leadershipWorker,
-			prayerDetailsProvider,
-			adhanPlayer,
-			reminderPlayer,
-		},
-	}
-
-	app := app.NewApplication(config)
-
-	app.Execute()
+	a := app.NewApplication("adhan")
+	a.AddWorker(storeWorker)
+	a.AddWorker(leadershipWorker)
+	a.AddWorker(prayerDetailsProvider)
+	a.AddWorker(adhanPlayer)
+	a.AddWorker(reminderPlayer)
+	a.Execute()
 }
