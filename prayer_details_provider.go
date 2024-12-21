@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,6 +10,10 @@ import (
 	"time"
 
 	qdb "github.com/rqure/qdb/src"
+	"github.com/rqure/qlib/pkg/app"
+	"github.com/rqure/qlib/pkg/data"
+	"github.com/rqure/qlib/pkg/data/query"
+	"github.com/rqure/qlib/pkg/log"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -23,37 +28,37 @@ type PrayerDetailsProviderSignals struct {
 }
 
 type PrayerDetailsProvider struct {
-	db           qdb.IDatabase
+	store        data.Store
 	isLeader     bool
 	tickInterval time.Duration
 	lastTick     time.Time
 	Signals      PrayerDetailsProviderSignals
 }
 
-func NewPrayerDetailsProvider(db qdb.IDatabase) *PrayerDetailsProvider {
+func NewPrayerDetailsProvider(store data.Store) *PrayerDetailsProvider {
 	return &PrayerDetailsProvider{
 		db:           db,
 		tickInterval: 10 * time.Second,
 	}
 }
 
-func (a *PrayerDetailsProvider) OnBecameLeader() {
+func (a *PrayerDetailsProvider) OnBecameLeader(context.Context) {
 	a.isLeader = true
 }
 
-func (a *PrayerDetailsProvider) OnLostLeadership() {
+func (a *PrayerDetailsProvider) OnLostLeadership(context.Context) {
 	a.isLeader = false
 }
 
-func (a *PrayerDetailsProvider) Init() {
+func (a *PrayerDetailsProvider) Init(context.Context, app.Handle) {
 
 }
 
-func (a *PrayerDetailsProvider) Deinit() {
+func (a *PrayerDetailsProvider) Deinit(context.Context) {
 
 }
 
-func (a *PrayerDetailsProvider) DoWork() {
+func (a *PrayerDetailsProvider) DoWork(context.Context) {
 	if !a.isLeader {
 		return
 	}
@@ -63,18 +68,18 @@ func (a *PrayerDetailsProvider) DoWork() {
 	}
 
 	a.lastTick = time.Now()
-	controllers := qdb.NewEntityFinder(a.db).Find(qdb.SearchCriteria{
+	controllers := query.New(a.db).Find(qdb.SearchCriteria{
 		EntityType: "AdhanController",
 		Conditions: []qdb.FieldConditionEval{},
 	})
 
 	for _, controller := range controllers {
-		capacity := controller.GetField("Prayer Buffer->Capacity").PullInt()
-		currentIndex := controller.GetField("Prayer Buffer->CurrentIndex").PullInt()
-		endIndex := controller.GetField("Prayer Buffer->EndIndex").PullInt()
+		capacity := controller.GetField("Prayer Buffer->Capacity").ReadInt(ctx)
+		currentIndex := controller.GetField("Prayer Buffer->CurrentIndex").ReadInt(ctx)
+		endIndex := controller.GetField("Prayer Buffer->EndIndex").ReadInt(ctx)
 
 		if currentIndex == endIndex {
-			qdb.Info("[PrayerDetailsProvider::DoWork] Prayer buffer is empty, querying next prayers")
+			log.Info("Prayer buffer is empty, querying next prayers")
 			country := controller.GetField("Country").PullValue(&qdb.String{}).(*qdb.String)
 			city := controller.GetField("City").PullValue(&qdb.String{}).(*qdb.String)
 			baseUrl := controller.GetField("BaseURL").PullValue(&qdb.String{}).(*qdb.String)
@@ -82,17 +87,17 @@ func (a *PrayerDetailsProvider) DoWork() {
 
 			for _, prayer := range prayerDetails {
 				if (endIndex+1)%capacity == currentIndex {
-					qdb.Warn("[PrayerDetailsProvider::DoWork] Prayer buffer is full")
+					log.Warn("Prayer buffer is full")
 					break
 				}
 
-				controller.GetField(fmt.Sprintf("Prayer Buffer->%d->PrayerName", endIndex)).PushValue(prayer.Name)
-				controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", endIndex)).PushValue(prayer.Time)
+				controller.GetField(fmt.Sprintf("Prayer Buffer->%d->PrayerName", endIndex)).WriteValue(ctx, prayer.Name)
+				controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", endIndex)).WriteValue(ctx, prayer.Time)
 
-				qdb.Info("[PrayerDetailsProvider::DoWork] Added prayer '%s' (startTime=%s) to the buffer (endIndex=%d)", prayer.Name.Raw, prayer.Time.Raw.AsTime().Format(time.RFC3339), endIndex)
+				log.Info("Added prayer '%s' (startTime=%s) to the buffer (endIndex=%d)", prayer.Name.Raw, prayer.Time.Raw.AsTime().Format(time.RFC3339), endIndex)
 
 				endIndex = (endIndex + 1) % capacity
-				controller.GetField("Prayer Buffer->EndIndex").PushInt(endIndex)
+				controller.GetField("Prayer Buffer->EndIndex").WriteInt(ctx, endIndex)
 			}
 		} else {
 			nextPrayer := &PrayerDetails{
@@ -104,9 +109,9 @@ func (a *PrayerDetailsProvider) DoWork() {
 			controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", currentIndex)).PullValue(nextPrayer.Time)
 
 			if time.Now().After(nextPrayer.Time.Raw.AsTime()) {
-				qdb.Info("[PrayerDetailsProvider::DoWork] Next prayer '%s' has started", nextPrayer.Name.Raw)
+				log.Info("Next prayer '%s' has started", nextPrayer.Name.Raw)
 				currentIndex = (currentIndex + 1) % capacity
-				controller.GetField("Prayer Buffer->CurrentIndex").PushInt(currentIndex)
+				controller.GetField("Prayer Buffer->CurrentIndex").WriteInt(ctx, currentIndex)
 				a.Signals.NextPrayerStarted.Emit(nextPrayer.Name.Raw)
 			} else {
 				a.Signals.NextPrayerInfo.Emit(nextPrayer.Name.Raw, nextPrayer.Time.Raw.AsTime())
@@ -117,7 +122,7 @@ func (a *PrayerDetailsProvider) DoWork() {
 
 func (a *PrayerDetailsProvider) QueryNextPrayers(baseUrl, country, city string) []*PrayerDetails {
 	if baseUrl == "" || country == "" || city == "" {
-		qdb.Error("[PrayerDetailsProvider::QueryNextPrayers] Query options are invalid")
+		log.Error("Query options are invalid")
 		return []*PrayerDetails{}
 	}
 
@@ -128,7 +133,7 @@ func (a *PrayerDetailsProvider) QueryNextPrayers(baseUrl, country, city string) 
 
 	resp, err := http.Get(fmt.Sprintf("%s?%s", baseUrl, params.Encode()))
 	if err != nil {
-		qdb.Error("[PrayerDetailsProvider::QueryNextPrayers] Failed to fetch prayer times: %v", err)
+		log.Error("Failed to fetch prayer times: %v", err)
 		return result
 	}
 	defer resp.Body.Close()
@@ -157,7 +162,7 @@ func (a *PrayerDetailsProvider) QueryNextPrayers(baseUrl, country, city string) 
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		qdb.Error("[PrayerDetailsProvider::QueryNextPrayers] Failed to decode prayer times: %v", err)
+		log.Error("Failed to decode prayer times: %v", err)
 		return result
 	}
 
@@ -171,13 +176,13 @@ func (a *PrayerDetailsProvider) QueryNextPrayers(baseUrl, country, city string) 
 		} {
 			loc, err := time.LoadLocation(day.Meta.Timezone)
 			if err != nil {
-				qdb.Warn("[PrayerDetailsProvider::QueryNextPrayers] Failed to load timezone: %v", err)
+				log.Warn("Failed to load timezone: %v", err)
 				loc = time.Local
 			}
 
 			timeParsed, err := time.ParseInLocation("02 Jan 2006 15:04 (MST)", fmt.Sprintf("%s %s", day.Date.Readable, timeStr), loc)
 			if err != nil {
-				qdb.Warn("[PrayerDetailsProvider::QueryNextPrayers] Failed to parse time: %v", err)
+				log.Warn("Failed to parse time: %v", err)
 				continue
 			}
 

@@ -1,34 +1,39 @@
 package main
 
 import (
+	"context"
 	"math/rand"
 
 	qdb "github.com/rqure/qdb/src"
+	"github.com/rqure/qlib/pkg/app"
+	"github.com/rqure/qlib/pkg/data"
+	"github.com/rqure/qlib/pkg/data/query"
+	"github.com/rqure/qlib/pkg/log"
 )
 
 type AdhanPlayer struct {
-	db qdb.IDatabase
+	store data.Store
 }
 
-func NewAdhanPlayer(db qdb.IDatabase) *AdhanPlayer {
+func NewAdhanPlayer(store data.Store) *AdhanPlayer {
 	return &AdhanPlayer{
 		db: db,
 	}
 }
 
-func (a *AdhanPlayer) Init() {
+func (a *AdhanPlayer) Init(context.Context, app.Handle) {
 }
 
-func (a *AdhanPlayer) Deinit() {
+func (a *AdhanPlayer) Deinit(context.Context) {
 }
 
-func (a *AdhanPlayer) DoWork() {
+func (a *AdhanPlayer) DoWork(context.Context) {
 }
 
 func (a *AdhanPlayer) OnNextPrayerStarted(args ...interface{}) {
 	prayerName := args[0].(string)
 
-	adhans := qdb.NewEntityFinder(a.db).Find(qdb.SearchCriteria{
+	adhans := query.New(a.db).Find(qdb.SearchCriteria{
 		EntityType: "Adhan",
 		Conditions: []qdb.FieldConditionEval{
 			qdb.NewBoolCondition().Where("IsFajr").IsEqualTo(&qdb.Bool{Raw: false}),
@@ -37,7 +42,7 @@ func (a *AdhanPlayer) OnNextPrayerStarted(args ...interface{}) {
 	})
 
 	if prayerName == "Fajr" {
-		adhans = qdb.NewEntityFinder(a.db).Find(qdb.SearchCriteria{
+		adhans = query.New(a.db).Find(qdb.SearchCriteria{
 			EntityType: "Adhan",
 			Conditions: []qdb.FieldConditionEval{
 				qdb.NewBoolCondition().Where("IsFajr").IsEqualTo(&qdb.Bool{Raw: true}),
@@ -48,22 +53,22 @@ func (a *AdhanPlayer) OnNextPrayerStarted(args ...interface{}) {
 
 	randomIndex := rand.Intn(len(adhans))
 	adhan := adhans[randomIndex]
-	fileReference := adhan.GetField("AudioFile").PullEntityReference()
+	fileReference := adhan.GetField("AudioFile").ReadEntityReference(ctx)
 
 	if fileReference == "" {
-		qdb.Warn("[AdhanPlayer::OnNextPrayerStarted] Adhan (%v) has no audio file configured", adhan)
+		log.Warn("Adhan (%v) has no audio file configured", adhan)
 		return
 	}
 
-	fileDescription := adhan.GetField("AudioFile->Description").PullString()
-	qdb.Info("[AdhanPlayer::OnNextPrayerStarted] Playing adhan: %s", fileDescription)
+	fileDescription := adhan.GetField("AudioFile->Description").ReadString(ctx)
+	log.Info("Playing adhan: %s", fileDescription)
 
-	audioControllers := qdb.NewEntityFinder(a.db).Find(qdb.SearchCriteria{
+	audioControllers := query.New(a.db).Find(qdb.SearchCriteria{
 		EntityType: "AudioController",
 		Conditions: []qdb.FieldConditionEval{},
 	})
 
 	for _, audioController := range audioControllers {
-		audioController.GetField("AudioFile").PushEntityReference(fileReference)
+		audioController.GetField("AudioFile").WriteEntityReference(ctx, fileReference)
 	}
 }

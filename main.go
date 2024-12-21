@@ -4,69 +4,64 @@ import (
 	"os"
 
 	qdb "github.com/rqure/qdb/src"
+	"github.com/rqure/qlib/pkg/app"
+	"github.com/rqure/qlib/pkg/app/workers"
+	"github.com/rqure/qlib/pkg/data/store"
 )
 
 func getDatabaseAddress() string {
-	addr := os.Getenv("QDB_ADDR")
+	addr := os.Getenv("Q_ADDR")
 	if addr == "" {
-		addr = "redis:6379"
+		addr = "ws://webgateway:20000/ws"
 	}
 
 	return addr
 }
 
 func main() {
-	db := qdb.NewRedisDatabase(qdb.RedisDatabaseConfig{
+	db := store.NewWeb(store.WebConfig{
 		Address: getDatabaseAddress(),
 	})
 
-	dbWorker := qdb.NewDatabaseWorker(db)
-	leaderElectionWorker := qdb.NewLeaderElectionWorker(db)
+	storeWorker := workers.NewStore(db)
+	leadershipWorker := workers.NewLeadership(db)
 	adhanPlayer := NewAdhanPlayer(db)
 	prayerDetailsProvider := NewPrayerDetailsProvider(db)
 	reminderPlayer := NewReminderPlayer(db)
 
-	schemaValidator := qdb.NewSchemaValidator(db)
+	schemaValidator := leadershipWorker.GetEntityFieldValidator()
 
-	schemaValidator.AddEntity("Root", "SchemaUpdateTrigger")
-	schemaValidator.AddEntity("AdhanController", "Country", "City", "BaseURL")
-	schemaValidator.AddEntity("RingBuffer", "Capacity", "CurrentIndex", "EndIndex")
-	schemaValidator.AddEntity("MP3File", "Content", "Description")
-	schemaValidator.AddEntity("Adhan", "AudioFile", "Enabled", "IsFajr")
-	schemaValidator.AddEntity("Prayer", "PrayerName", "StartTime")
-	schemaValidator.AddEntity("PrayerReminder", "MinutesBefore", "TextToSpeech", "HasPlayed")
+	schemaValidator.RegisterEntityFields("Root", "SchemaUpdateTrigger")
+	schemaValidator.RegisterEntityFields("AdhanController", "Country", "City", "BaseURL")
+	schemaValidator.RegisterEntityFields("RingBuffer", "Capacity", "CurrentIndex", "EndIndex")
+	schemaValidator.RegisterEntityFields("MP3File", "Content", "Description")
+	schemaValidator.RegisterEntityFields("Adhan", "AudioFile", "Enabled", "IsFajr")
+	schemaValidator.RegisterEntityFields("Prayer", "PrayerName", "StartTime")
+	schemaValidator.RegisterEntityFields("PrayerReminder", "MinutesBefore", "TextToSpeech", "HasPlayed")
 
-	dbWorker.Signals.SchemaUpdated.Connect(qdb.Slot(schemaValidator.ValidationRequired))
-	dbWorker.Signals.Connected.Connect(qdb.Slot(schemaValidator.ValidationRequired))
-	leaderElectionWorker.AddAvailabilityCriteria(func() bool {
-		return dbWorker.IsConnected() && schemaValidator.IsValid()
-	})
+	storeWorker.Connected.Connect(leadershipWorker.OnStoreConnected)
+	storeWorker.Disconnected.Connect(leadershipWorker.OnStoreDisconnected)
 
-	dbWorker.Signals.Connected.Connect(qdb.Slot(leaderElectionWorker.OnDatabaseConnected))
-	dbWorker.Signals.Disconnected.Connect(qdb.Slot(leaderElectionWorker.OnDatabaseDisconnected))
+	leadershipWorker.BecameLeader().Connect(prayerDetailsProvider.OnBecameLeader)
+	leadershipWorker.LosingLeadership().Connect(prayerDetailsProvider.OnLostLeadership)
 
-	leaderElectionWorker.Signals.BecameLeader.Connect(qdb.Slot(prayerDetailsProvider.OnBecameLeader))
-	leaderElectionWorker.Signals.LosingLeadership.Connect(qdb.Slot(prayerDetailsProvider.OnLostLeadership))
-
-	prayerDetailsProvider.Signals.NextPrayerStarted.Connect(qdb.SlotWithArgs(adhanPlayer.OnNextPrayerStarted))
-	prayerDetailsProvider.Signals.NextPrayerStarted.Connect(qdb.SlotWithArgs(reminderPlayer.OnNextPrayerStarted))
-	prayerDetailsProvider.Signals.NextPrayerInfo.Connect(qdb.SlotWithArgs(reminderPlayer.OnNextPrayerInfo))
+	prayerDetailsProvider.Signals.NextPrayerStarted.Connect(adhanPlayer.OnNextPrayerStarted)
+	prayerDetailsProvider.Signals.NextPrayerStarted.Connect(reminderPlayer.OnNextPrayerStarted)
+	prayerDetailsProvider.Signals.NextPrayerInfo.Connect(reminderPlayer.OnNextPrayerInfo)
 
 	// Create a new application configuration
 	config := qdb.ApplicationConfig{
 		Name: "adhan",
 		Workers: []qdb.IWorker{
-			dbWorker,
-			leaderElectionWorker,
+			storeWorker,
+			leadershipWorker,
 			prayerDetailsProvider,
 			adhanPlayer,
 			reminderPlayer,
 		},
 	}
 
-	// Create a new application
-	app := qdb.NewApplication(config)
+	app := app.NewApplication(config)
 
-	// Execute the application
 	app.Execute()
 }

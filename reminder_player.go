@@ -1,34 +1,39 @@
 package main
 
 import (
+	"context"
 	"os"
 	"strings"
 	"time"
 
 	qdb "github.com/rqure/qdb/src"
+	"github.com/rqure/qlib/pkg/app"
+	"github.com/rqure/qlib/pkg/data"
+	"github.com/rqure/qlib/pkg/data/query"
+	"github.com/rqure/qlib/pkg/log"
 )
 
 type ReminderPlayer struct {
-	db qdb.IDatabase
+	store data.Store
 }
 
-func NewReminderPlayer(db qdb.IDatabase) *ReminderPlayer {
+func NewReminderPlayer(store data.Store) *ReminderPlayer {
 	return &ReminderPlayer{
 		db: db,
 	}
 }
 
-func (a *ReminderPlayer) Init() {
+func (a *ReminderPlayer) Init(context.Context, app.Handle) {
 }
 
-func (a *ReminderPlayer) Deinit() {
+func (a *ReminderPlayer) Deinit(context.Context) {
 }
 
-func (a *ReminderPlayer) DoWork() {
+func (a *ReminderPlayer) DoWork(context.Context) {
 }
 
 func (a *ReminderPlayer) OnNextPrayerStarted(args ...interface{}) {
-	reminders := qdb.NewEntityFinder(a.db).Find(qdb.SearchCriteria{
+	reminders := query.New(a.db).Find(qdb.SearchCriteria{
 		EntityType: "PrayerReminder",
 		Conditions: []qdb.FieldConditionEval{
 			qdb.NewBoolCondition().Where("HasPlayed").IsEqualTo(&qdb.Bool{Raw: true}),
@@ -36,7 +41,7 @@ func (a *ReminderPlayer) OnNextPrayerStarted(args ...interface{}) {
 	})
 
 	for _, reminder := range reminders {
-		reminder.GetField("HasPlayed").PushValue(&qdb.Bool{Raw: false})
+		reminder.GetField("HasPlayed").WriteValue(ctx, &qdb.Bool{Raw: false})
 	}
 }
 
@@ -44,7 +49,7 @@ func (a *ReminderPlayer) OnNextPrayerInfo(args ...interface{}) {
 	prayerName := args[0].(string)
 	prayerTime := args[1].(time.Time)
 
-	reminders := qdb.NewEntityFinder(a.db).Find(qdb.SearchCriteria{
+	reminders := query.New(a.db).Find(qdb.SearchCriteria{
 		EntityType: "PrayerReminder",
 		Conditions: []qdb.FieldConditionEval{
 			qdb.NewBoolCondition().Where("HasPlayed").IsEqualTo(&qdb.Bool{Raw: false}),
@@ -53,16 +58,16 @@ func (a *ReminderPlayer) OnNextPrayerInfo(args ...interface{}) {
 	})
 
 	for _, reminder := range reminders {
-		textToSpeech := reminder.GetField("TextToSpeech").PullString()
+		textToSpeech := reminder.GetField("TextToSpeech").ReadString(ctx)
 		if textToSpeech == "" {
 			continue
 		}
 
 		textToSpeech = strings.ReplaceAll(textToSpeech, "{Prayer}", prayerName)
 
-		qdb.Info("[ReminderPlayer::OnNextPrayerInfo] Playing reminder: %s", reminder)
+		log.Info("Playing reminder: %s", reminder)
 
-		alertControllers := qdb.NewEntityFinder(a.db).Find(qdb.SearchCriteria{
+		alertControllers := query.New(a.db).Find(qdb.SearchCriteria{
 			EntityType: "AlertController",
 			Conditions: []qdb.FieldConditionEval{},
 		})
@@ -97,6 +102,6 @@ func (a *ReminderPlayer) OnNextPrayerInfo(args ...interface{}) {
 			})
 		}
 
-		reminder.GetField("HasPlayed").PushBool(true)
+		reminder.GetField("HasPlayed").WriteBool(ctx, true)
 	}
 }
