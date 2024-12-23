@@ -14,6 +14,7 @@ import (
 	"github.com/rqure/qlib/pkg/data/query"
 	"github.com/rqure/qlib/pkg/log"
 	"github.com/rqure/qlib/pkg/signalslots"
+	"github.com/rqure/qlib/pkg/signalslots/signal"
 )
 
 type PrayerDetails struct {
@@ -33,8 +34,10 @@ type PrayerDetailsProvider struct {
 
 func NewPrayerDetailsProvider(store data.Store) *PrayerDetailsProvider {
 	return &PrayerDetailsProvider{
-		store:        store,
-		tickInterval: 10 * time.Second,
+		store:             store,
+		tickInterval:      10 * time.Second,
+		NextPrayerStarted: signal.New(),
+		NextPrayerInfo:    signal.New(),
 	}
 }
 
