@@ -36,7 +36,7 @@ func main() {
 	schemaValidator.RegisterEntityFields("MP3File", "Content", "Description")
 	schemaValidator.RegisterEntityFields("Adhan", "AudioFile", "Enabled", "IsFajr")
 	schemaValidator.RegisterEntityFields("Prayer", "PrayerName", "StartTime")
-	schemaValidator.RegisterEntityFields("PrayerReminder", "MinutesBefore", "TextToSpeech", "HasPlayed")
+	schemaValidator.RegisterEntityFields("PrayerReminder", "MinutesBefore", "TextToSpeech", "HasPlayed", "Prayer", "Language")
 
 	storeWorker.Connected.Connect(leadershipWorker.OnStoreConnected)
 	storeWorker.Disconnected.Connect(leadershipWorker.OnStoreDisconnected)

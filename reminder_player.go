@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	qdb "github.com/rqure/qdb/src"
 	"github.com/rqure/qlib/pkg/app"
 	"github.com/rqure/qlib/pkg/data"
 	"github.com/rqure/qlib/pkg/data/binding"
@@ -50,14 +49,14 @@ func (a *ReminderPlayer) OnNextPrayerInfo(ctx context.Context, args ...interface
 
 	reminders := query.New(a.store).
 		ForType("PrayerReminder").
-		Where("PrayerName").Equals(prayerName).
+		Where("Prayer").Equals(prayerName).
 		Where("HasPlayed").Equals(false).
 		Where("MinutesBefore").GreaterThanOrEqual(int64(time.Until(prayerTime).Minutes())).
 		Execute(ctx)
 
 	for _, reminder := range reminders {
 		textToSpeech := reminder.GetField("TextToSpeech").ReadString(ctx)
-		language := reminder.GetField("TTSLanguage").ReadString(ctx)
+		language := reminder.GetField("Language").ReadString(ctx)
 		if textToSpeech == "" {
 			continue
 		}
@@ -70,7 +69,7 @@ func (a *ReminderPlayer) OnNextPrayerInfo(ctx context.Context, args ...interface
 			Execute(ctx)
 
 		for _, alertController := range alertControllers {
-			alertController.GetField("ApplicationName").WriteString(ctx, qdb.GetApplicationName())
+			alertController.GetField("ApplicationName").WriteString(ctx, app.GetName())
 			alertController.GetField("Description").WriteString(ctx, textToSpeech)
 			alertController.GetField("TTSLanguage").WriteString(ctx, language)
 			alertController.GetField("TTSAlert").WriteBool(ctx, strings.Contains(os.Getenv("ALERTS"), "TTS"))

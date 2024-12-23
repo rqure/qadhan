@@ -23,10 +23,9 @@ type PrayerDetails struct {
 }
 
 type PrayerDetailsProvider struct {
-	store        data.Store
-	isLeader     bool
-	tickInterval time.Duration
-	lastTick     time.Time
+	store    data.Store
+	isLeader bool
+	ticker   *time.Ticker
 
 	NextPrayerStarted signalslots.Signal
 	NextPrayerInfo    signalslots.Signal
@@ -35,7 +34,7 @@ type PrayerDetailsProvider struct {
 func NewPrayerDetailsProvider(store data.Store) *PrayerDetailsProvider {
 	return &PrayerDetailsProvider{
 		store:             store,
-		tickInterval:      10 * time.Second,
+		ticker:            time.NewTicker(10 * time.Second),
 		NextPrayerStarted: signal.New(),
 		NextPrayerInfo:    signal.New(),
 	}
@@ -54,7 +53,7 @@ func (a *PrayerDetailsProvider) Init(context.Context, app.Handle) {
 }
 
 func (a *PrayerDetailsProvider) Deinit(context.Context) {
-
+	a.ticker.Stop()
 }
 
 func (a *PrayerDetailsProvider) DoWork(ctx context.Context) {
@@ -62,56 +61,55 @@ func (a *PrayerDetailsProvider) DoWork(ctx context.Context) {
 		return
 	}
 
-	if time.Since(a.lastTick) < a.tickInterval {
-		return
-	}
+	select {
+	case <-a.ticker.C:
+		controllers := query.New(a.store).
+			ForType("AdhanController").
+			Execute(ctx)
 
-	a.lastTick = time.Now()
-	controllers := query.New(a.store).
-		ForType("AdhanController").
-		Execute(ctx)
+		for _, controller := range controllers {
+			capacity := controller.GetField("Prayer Buffer->Capacity").ReadInt(ctx)
+			currentIndex := controller.GetField("Prayer Buffer->CurrentIndex").ReadInt(ctx)
+			endIndex := controller.GetField("Prayer Buffer->EndIndex").ReadInt(ctx)
 
-	for _, controller := range controllers {
-		capacity := controller.GetField("Prayer Buffer->Capacity").ReadInt(ctx)
-		currentIndex := controller.GetField("Prayer Buffer->CurrentIndex").ReadInt(ctx)
-		endIndex := controller.GetField("Prayer Buffer->EndIndex").ReadInt(ctx)
+			if currentIndex == endIndex {
+				log.Info("Prayer buffer is empty, querying next prayers")
+				country := controller.GetField("Country").ReadString(ctx)
+				city := controller.GetField("City").ReadString(ctx)
+				baseUrl := controller.GetField("BaseURL").ReadString(ctx)
+				prayerDetails := a.QueryNextPrayers(baseUrl, country, city)
 
-		if currentIndex == endIndex {
-			log.Info("Prayer buffer is empty, querying next prayers")
-			country := controller.GetField("Country").ReadString(ctx)
-			city := controller.GetField("City").ReadString(ctx)
-			baseUrl := controller.GetField("BaseURL").ReadString(ctx)
-			prayerDetails := a.QueryNextPrayers(baseUrl, country, city)
+				for _, prayer := range prayerDetails {
+					if (endIndex+1)%capacity == currentIndex {
+						log.Warn("Prayer buffer is full")
+						break
+					}
 
-			for _, prayer := range prayerDetails {
-				if (endIndex+1)%capacity == currentIndex {
-					log.Warn("Prayer buffer is full")
-					break
+					controller.GetField(fmt.Sprintf("Prayer Buffer->%d->PrayerName", endIndex)).WriteString(ctx, prayer.Name)
+					controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", endIndex)).WriteTimestamp(ctx, prayer.Time)
+
+					log.Info("Added prayer '%s' (startTime=%s) to the buffer (endIndex=%d)", prayer.Name, prayer.Time.Format(time.RFC3339), endIndex)
+
+					endIndex = (endIndex + 1) % capacity
+					controller.GetField("Prayer Buffer->EndIndex").WriteInt(ctx, endIndex)
 				}
-
-				controller.GetField(fmt.Sprintf("Prayer Buffer->%d->PrayerName", endIndex)).WriteString(ctx, prayer.Name)
-				controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", endIndex)).WriteTimestamp(ctx, prayer.Time)
-
-				log.Info("Added prayer '%s' (startTime=%s) to the buffer (endIndex=%d)", prayer.Name, prayer.Time.Format(time.RFC3339), endIndex)
-
-				endIndex = (endIndex + 1) % capacity
-				controller.GetField("Prayer Buffer->EndIndex").WriteInt(ctx, endIndex)
-			}
-		} else {
-			nextPrayer := &PrayerDetails{}
-
-			nextPrayer.Name = controller.GetField(fmt.Sprintf("Prayer Buffer->%d->PrayerName", currentIndex)).ReadString(ctx)
-			nextPrayer.Time = controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", currentIndex)).ReadTimestamp(ctx)
-
-			if time.Now().After(nextPrayer.Time) {
-				log.Info("Next prayer '%s' has started", nextPrayer.Name)
-				currentIndex = (currentIndex + 1) % capacity
-				controller.GetField("Prayer Buffer->CurrentIndex").WriteInt(ctx, currentIndex)
-				a.NextPrayerStarted.Emit(ctx, nextPrayer.Name)
 			} else {
-				a.NextPrayerInfo.Emit(ctx, nextPrayer.Name, nextPrayer.Time)
+				nextPrayer := &PrayerDetails{}
+
+				nextPrayer.Name = controller.GetField(fmt.Sprintf("Prayer Buffer->%d->PrayerName", currentIndex)).ReadString(ctx)
+				nextPrayer.Time = controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", currentIndex)).ReadTimestamp(ctx)
+
+				if time.Now().After(nextPrayer.Time) {
+					log.Info("Next prayer '%s' has started", nextPrayer.Name)
+					currentIndex = (currentIndex + 1) % capacity
+					controller.GetField("Prayer Buffer->CurrentIndex").WriteInt(ctx, currentIndex)
+					a.NextPrayerStarted.Emit(ctx, nextPrayer.Name)
+				} else {
+					a.NextPrayerInfo.Emit(ctx, nextPrayer.Name, nextPrayer.Time)
+				}
 			}
 		}
+	default:
 	}
 }
 
