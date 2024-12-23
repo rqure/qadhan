@@ -104,9 +104,9 @@ func (a *PrayerDetailsProvider) DoWork(ctx context.Context) {
 				log.Info("Next prayer '%s' has started", nextPrayer.Name)
 				currentIndex = (currentIndex + 1) % capacity
 				controller.GetField("Prayer Buffer->CurrentIndex").WriteInt(ctx, currentIndex)
-				a.NextPrayerStarted.Emit(nextPrayer.Name)
+				a.NextPrayerStarted.Emit(ctx, nextPrayer.Name)
 			} else {
-				a.NextPrayerInfo.Emit(nextPrayer.Name, nextPrayer.Time)
+				a.NextPrayerInfo.Emit(ctx, nextPrayer.Name, nextPrayer.Time)
 			}
 		}
 	}

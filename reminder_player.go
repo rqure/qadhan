@@ -50,6 +50,7 @@ func (a *ReminderPlayer) OnNextPrayerInfo(ctx context.Context, args ...interface
 
 	reminders := query.New(a.store).
 		ForType("PrayerReminder").
+		Where("PrayerName").Equals(prayerName).
 		Where("HasPlayed").Equals(false).
 		Where("MinutesBefore").GreaterThanOrEqual(int64(time.Until(prayerTime).Minutes())).
 		Execute(ctx)
@@ -59,8 +60,6 @@ func (a *ReminderPlayer) OnNextPrayerInfo(ctx context.Context, args ...interface
 		if textToSpeech == "" {
 			continue
 		}
-
-		textToSpeech = strings.ReplaceAll(textToSpeech, "{Prayer}", prayerName)
 
 		log.Info("Playing reminder: %s", reminder)
 
