@@ -57,6 +57,7 @@ func (a *ReminderPlayer) OnNextPrayerInfo(ctx context.Context, args ...interface
 
 	for _, reminder := range reminders {
 		textToSpeech := reminder.GetField("TextToSpeech").ReadString(ctx)
+		language := reminder.GetField("TTSLanguage").ReadString(ctx)
 		if textToSpeech == "" {
 			continue
 		}
@@ -71,6 +72,7 @@ func (a *ReminderPlayer) OnNextPrayerInfo(ctx context.Context, args ...interface
 		for _, alertController := range alertControllers {
 			alertController.GetField("ApplicationName").WriteString(ctx, qdb.GetApplicationName())
 			alertController.GetField("Description").WriteString(ctx, textToSpeech)
+			alertController.GetField("TTSLanguage").WriteString(ctx, language)
 			alertController.GetField("TTSAlert").WriteBool(ctx, strings.Contains(os.Getenv("ALERTS"), "TTS"))
 			alertController.GetField("EmailAlert").WriteBool(ctx, strings.Contains(os.Getenv("ALERTS"), "EMAIL"))
 			alertController.GetField("SendTrigger").WriteInt(ctx)
