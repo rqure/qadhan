@@ -8,7 +8,6 @@ import (
 
 	"github.com/rqure/qlib/pkg/app"
 	"github.com/rqure/qlib/pkg/data"
-	"github.com/rqure/qlib/pkg/data/binding"
 	"github.com/rqure/qlib/pkg/data/query"
 	"github.com/rqure/qlib/pkg/log"
 )
@@ -34,7 +33,7 @@ func (a *ReminderPlayer) DoWork(context.Context) {
 
 func (a *ReminderPlayer) OnNextPrayerStarted(ctx context.Context, args ...interface{}) {
 	reminders := query.New(a.store).
-		ForType("PrayerReminder").
+		From("PrayerReminder").
 		Where("HasPlayed").Equals(true).
 		Execute(ctx)
 
@@ -48,36 +47,36 @@ func (a *ReminderPlayer) OnNextPrayerInfo(ctx context.Context, args ...interface
 	prayerTime := args[1].(time.Time)
 
 	reminders := query.New(a.store).
-		ForType("PrayerReminder").
+		Select("TextToSpeech", "Language").
+		From("PrayerReminder").
 		Where("Prayer").Equals(prayerName).
 		Where("HasPlayed").Equals(false).
 		Where("MinutesBefore").GreaterThanOrEqual(int64(time.Until(prayerTime).Minutes())).
 		Execute(ctx)
 
 	for _, reminder := range reminders {
-		textToSpeech := reminder.GetField("TextToSpeech").ReadString(ctx)
-		language := reminder.GetField("Language").ReadString(ctx)
+		textToSpeech := reminder.GetField("TextToSpeech").GetString()
+		language := reminder.GetField("Language").GetString()
 		if textToSpeech == "" {
 			continue
 		}
 
 		log.Info("Playing reminder: %s", reminder)
 
-		multi := binding.NewMulti(a.store)
-		alertControllers := query.New(multi).
-			ForType("AlertController").
+		alertControllers := query.New(a.store).
+			From("AlertController").
 			Execute(ctx)
 
 		for _, alertController := range alertControllers {
-			alertController.GetField("ApplicationName").WriteString(ctx, app.GetName())
-			alertController.GetField("Description").WriteString(ctx, textToSpeech)
-			alertController.GetField("TTSLanguage").WriteString(ctx, language)
-			alertController.GetField("TTSAlert").WriteBool(ctx, strings.Contains(os.Getenv("ALERTS"), "TTS"))
-			alertController.GetField("EmailAlert").WriteBool(ctx, strings.Contains(os.Getenv("ALERTS"), "EMAIL"))
-			alertController.GetField("SendTrigger").WriteInt(ctx)
+			alertController.DoMulti(ctx, func(alertController data.EntityBinding) {
+				alertController.GetField("ApplicationName").WriteString(ctx, app.GetName())
+				alertController.GetField("Description").WriteString(ctx, textToSpeech)
+				alertController.GetField("TTSLanguage").WriteString(ctx, language)
+				alertController.GetField("TTSAlert").WriteBool(ctx, strings.Contains(os.Getenv("ALERTS"), "TTS"))
+				alertController.GetField("EmailAlert").WriteBool(ctx, strings.Contains(os.Getenv("ALERTS"), "EMAIL"))
+				alertController.GetField("SendTrigger").WriteInt(ctx)
+			})
 		}
-
-		multi.Commit(ctx)
 
 		reminder.GetField("HasPlayed").WriteBool(ctx, true)
 	}

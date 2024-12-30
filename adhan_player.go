@@ -32,33 +32,35 @@ func (a *AdhanPlayer) DoWork(context.Context) {
 func (a *AdhanPlayer) OnNextPrayerStarted(ctx context.Context, args ...interface{}) {
 	prayerName := args[0].(string)
 
-	adhans := query.New(a.store).
-		ForType("Adhan").
+	q := query.New(a.store).
+		Select("AudioFile", "AudioFile->Description").
+		From("Adhan").
 		Where("IsFajr").Equals(false).
-		Where("Enabled").Equals(true).
-		Execute(ctx)
+		Where("Enabled").Equals(true)
 
 	if prayerName == "Fajr" {
-		adhans = query.New(a.store).
-			ForType("Adhan").
+		q = query.New(a.store).
+			Select("AudioFile", "AudioFile->Description").
+			From("Adhan").
 			Where("IsFajr").Equals(true).
-			Where("Enabled").Equals(true).
-			Execute(ctx)
+			Where("Enabled").Equals(true)
 	}
+
+	adhans := q.Execute(ctx)
 
 	randomIndex := rand.Intn(len(adhans))
 	adhan := adhans[randomIndex]
-	fileReference := adhan.GetField("AudioFile").ReadEntityReference(ctx)
+	fileReference := adhan.GetField("AudioFile").GetEntityReference()
 
 	if fileReference == "" {
 		log.Warn("Adhan (%v) has no audio file configured", adhan)
 		return
 	}
 
-	fileDescription := adhan.GetField("AudioFile->Description").ReadString(ctx)
+	fileDescription := adhan.GetField("AudioFile->Description").GetString()
 	log.Info("Playing adhan: %s", fileDescription)
 
-	audioControllers := query.New(a.store).ForType("AudioController").Execute(ctx)
+	audioControllers := query.New(a.store).From("AudioController").Execute(ctx)
 
 	for _, audioController := range audioControllers {
 		audioController.GetField("AudioFile").WriteEntityReference(ctx, fileReference)

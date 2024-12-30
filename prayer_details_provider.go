@@ -64,40 +64,47 @@ func (a *PrayerDetailsProvider) DoWork(ctx context.Context) {
 	select {
 	case <-a.ticker.C:
 		controllers := query.New(a.store).
-			ForType("AdhanController").
+			Select("Prayer Buffer->Capacity", "Prayer Buffer->CurrentIndex", "Prayer Buffer->EndIndex", "Country", "City", "BaseURL").
+			From("AdhanController").
 			Execute(ctx)
 
 		for _, controller := range controllers {
-			capacity := controller.GetField("Prayer Buffer->Capacity").ReadInt(ctx)
-			currentIndex := controller.GetField("Prayer Buffer->CurrentIndex").ReadInt(ctx)
-			endIndex := controller.GetField("Prayer Buffer->EndIndex").ReadInt(ctx)
+			capacity := controller.GetField("Prayer Buffer->Capacity").GetInt()
+			currentIndex := controller.GetField("Prayer Buffer->CurrentIndex").GetInt()
+			endIndex := controller.GetField("Prayer Buffer->EndIndex").GetInt()
 
 			if currentIndex == endIndex {
 				log.Info("Prayer buffer is empty, querying next prayers")
-				country := controller.GetField("Country").ReadString(ctx)
-				city := controller.GetField("City").ReadString(ctx)
-				baseUrl := controller.GetField("BaseURL").ReadString(ctx)
+				country := controller.GetField("Country").GetString()
+				city := controller.GetField("City").GetString()
+				baseUrl := controller.GetField("BaseURL").GetString()
 				prayerDetails := a.QueryNextPrayers(baseUrl, country, city)
 
-				for _, prayer := range prayerDetails {
-					if (endIndex+1)%capacity == currentIndex {
-						log.Warn("Prayer buffer is full")
-						break
+				controller.DoMulti(ctx, func(controller data.EntityBinding) {
+					for _, prayer := range prayerDetails {
+						if (endIndex+1)%capacity == currentIndex {
+							log.Warn("Prayer buffer is full")
+							break
+						}
+						controller.GetField(fmt.Sprintf("Prayer Buffer->%d->PrayerName", endIndex)).WriteString(ctx, prayer.Name)
+						controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", endIndex)).WriteTimestamp(ctx, prayer.Time)
+
+						log.Info("Added prayer '%s' (startTime=%s) to the buffer (endIndex=%d)", prayer.Name, prayer.Time.Format(time.RFC3339), endIndex)
+
+						endIndex = (endIndex + 1) % capacity
+						controller.GetField("Prayer Buffer->EndIndex").WriteInt(ctx, endIndex)
 					}
-
-					controller.GetField(fmt.Sprintf("Prayer Buffer->%d->PrayerName", endIndex)).WriteString(ctx, prayer.Name)
-					controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", endIndex)).WriteTimestamp(ctx, prayer.Time)
-
-					log.Info("Added prayer '%s' (startTime=%s) to the buffer (endIndex=%d)", prayer.Name, prayer.Time.Format(time.RFC3339), endIndex)
-
-					endIndex = (endIndex + 1) % capacity
-					controller.GetField("Prayer Buffer->EndIndex").WriteInt(ctx, endIndex)
-				}
+				})
 			} else {
 				nextPrayer := &PrayerDetails{}
 
-				nextPrayer.Name = controller.GetField(fmt.Sprintf("Prayer Buffer->%d->PrayerName", currentIndex)).ReadString(ctx)
-				nextPrayer.Time = controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", currentIndex)).ReadTimestamp(ctx)
+				controller.DoMulti(ctx, func(controller data.EntityBinding) {
+					controller.GetField(fmt.Sprintf("Prayer Buffer->%d->PrayerName", currentIndex)).ReadString(ctx)
+					controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", currentIndex)).ReadTimestamp(ctx)
+				})
+
+				nextPrayer.Name = controller.GetField(fmt.Sprintf("Prayer Buffer->%d->PrayerName", currentIndex)).GetString()
+				nextPrayer.Time = controller.GetField(fmt.Sprintf("Prayer Buffer->%d->StartTime", currentIndex)).GetTimestamp()
 
 				if time.Now().After(nextPrayer.Time) {
 					log.Info("Next prayer '%s' has started", nextPrayer.Name)
